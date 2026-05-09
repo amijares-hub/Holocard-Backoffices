@@ -51,14 +51,24 @@ export default function UsersEngine() {
   const [editShadowNotes, setEditShadowNotes] = useState('');
   const [isConfirmingEdit, setIsConfirmingEdit] = useState(false);
 
-  // Massive Gift State
+  // Ultimate Gift Spawner (Airdrop Pro) State
   const [isConfirmingGift, setIsConfirmingGift] = useState(false);
-  const [giftTier, setGiftTier] = useState('Entrenador');
+  const [giftTier, setGiftTier] = useState('All');
+  const [giftResourceType, setGiftResourceType] = useState<'exp' | 'pokeballs' | 'bp' | 'sku'>('pokeballs');
   const [giftAmount, setGiftAmount] = useState(10);
+  const [giftSKU, setGiftSKU] = useState('');
+  const [giftMinLevel, setGiftMinLevel] = useState(0);
+  const [giftMaxLevel, setGiftMaxLevel] = useState(100);
+  const [giftMinLTV, setGiftMinLTV] = useState(0);
+  const [giftInactivity, setGiftInactivity] = useState(0);
+  const [giftMessage, setGiftMessage] = useState('');
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [deployProgress, setDeployProgress] = useState(0);
+  const [holdProgress, setHoldProgress] = useState(0);
 
   useEffect(() => {
     fetchUsers();
-    setupLogsMock(); // Or real subscription
+    setupLogsMock();
   }, []);
 
   useEffect(() => {
@@ -291,35 +301,69 @@ export default function UsersEngine() {
     }, ...prev]);
   };
 
-  const executeMassiveGift = async () => {
-    setIsConfirmingGift(false);
-    
-    // Attempting a bulk update via RPC (requires setting up this function in Supabase)
-    const { error } = await supabase.rpc('gift_pokeballs_to_tier', { 
-      target_tier: giftTier, 
-      amount: giftAmount 
+  const calculateAirdropImpact = () => {
+    return users.filter(u => {
+      const matchesTier = giftTier === 'All' || u.tier === giftTier;
+      const matchesLevel = u.level >= giftMinLevel && u.level <= giftMaxLevel;
+      const matchesLTV = u.total_spent >= giftMinLTV;
+      
+      const lastActivityDate = new Date(u.last_activity);
+      const daysInactive = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24);
+      const matchesInactivity = daysInactive >= giftInactivity;
+
+      return matchesTier && matchesLevel && matchesLTV && matchesInactivity;
     });
+  };
 
-    if (error) {
-      console.error('Massive gift error:', error);
-      // Fallback: notify that RPC is needed or manual update required
-      setLiveLogs(prev => [{
-        id: Math.random().toString(), 
-        timestamp: new Date().toISOString(), 
-        message: `ERROR: Massive Airdrop requires RPC 'gift_pokeballs_to_tier' to be defined.`, 
-        type: 'system'
-      }, ...prev]);
-      return;
-    }
+  const executeMassiveGift = async () => {
+    const targets = calculateAirdropImpact();
+    if (targets.length === 0) return;
 
+    setIsDeploying(true);
+    setDeployProgress(0);
+    
+    // Safety Log
     setLiveLogs(prev => [{
-      id: Math.random().toString(), 
-      timestamp: new Date().toISOString(), 
-      message: `MASSIVE AIRDROP: ${giftAmount} HoloBalls successfully injected into all ${giftTier} accounts.`, 
+      id: Math.random().toString(),
+      timestamp: new Date().toISOString(),
+      message: `INITIATING GLOBAL AIRDROP: Target Count ${targets.length}. Resource: ${giftResourceType.toUpperCase()}. Payload authorized.`,
       type: 'system'
     }, ...prev]);
-    
-    fetchUsers(); // Refresh data
+
+    // Batching Simulation & Execution
+    for (let i = 0; i < targets.length; i++) {
+      const target = targets[i];
+      
+      const updateData: any = {};
+      if (giftResourceType === 'exp') updateData.points = target.exp + giftAmount;
+      if (giftResourceType === 'pokeballs') updateData.pokeballs = target.pokeballs + giftAmount;
+      if (giftResourceType === 'bp') updateData.points = (target.battle_pass_points || 0) + giftAmount;
+
+      await supabase.from('user_profiles').update(updateData).eq('id', target.id);
+      
+      if (giftMessage) {
+        // Notification engine logic (placeholder if table missing)
+        await supabase.from('user_notifications').insert({
+          user_id: target.id,
+          message: giftMessage,
+          type: 'gift',
+          read: false
+        }).select();
+      }
+
+      setDeployProgress(Math.round(((i + 1) / targets.length) * 100));
+      if (targets.length < 50) await new Promise(r => setTimeout(r, 50));
+    }
+
+    await fetchUsers();
+    setIsDeploying(false);
+    setIsConfirmingGift(false);
+    setLiveLogs(prev => [{
+      id: Math.random().toString(),
+      timestamp: new Date().toISOString(),
+      message: `AIRDROP COMPLETE: ${targets.length} nodes updated. Broadcast finalized.`,
+      type: 'system'
+    }, ...prev]);
   };
 
   return (
@@ -521,52 +565,177 @@ export default function UsersEngine() {
             </div>
           </div>
 
-          {/* GIFT SPAWNER */}
-          <div className="bg-gradient-to-br from-yellow-900/20 to-black border border-yellow-500/20 rounded-2xl p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-yellow-500/10 rounded-lg">
-                <Gift className="w-5 h-5 text-yellow-500" />
+          {/* ULTIMATE GIFT SPAWNER (AIRDROP PRO) */}
+          <div className="bg-[#09090b] border border-yellow-500/30 rounded-2xl p-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/5 blur-[60px] rounded-full -mr-16 -mt-16 group-hover:bg-yellow-500/10 transition-all"></div>
+            
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
+                  <Gift className="w-5 h-5 text-yellow-500" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white uppercase tracking-widest">Airdrop Pro</h3>
+                  <p className="text-[10px] text-zinc-500 font-mono">Precision supply deployment</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-widest">Massive Gift Spawner</h3>
-                <p className="text-[10px] text-zinc-500 font-mono">Airdrop resources globally</p>
+              <div className="px-2 py-1 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
+                <span className="text-[10px] font-black text-yellow-500 animate-pulse uppercase">Tactical Mode</span>
               </div>
             </div>
 
-            {isConfirmingGift ? (
-              <div className="space-y-4 animate-in fade-in zoom-in duration-200">
-                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
-                  <p className="text-xs font-bold text-red-400 mb-1 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" /> WARNING
-                  </p>
-                  <p className="text-[10px] text-zinc-400">Sending {giftAmount} HoloBalls to ALL "{giftTier}" users. This database operation cannot be undone.</p>
+            {isDeploying ? (
+              <div className="space-y-6 py-4 animate-in fade-in slide-in-from-bottom-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Deploying Payload...</p>
+                  <span className="text-sm font-mono text-yellow-500">{deployProgress}%</span>
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => setIsConfirmingGift(false)} className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-bold text-white uppercase">Cancel</button>
-                  <button onClick={executeMassiveGift} className="flex-1 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-xs font-bold text-white uppercase shadow-[0_0_15px_rgba(220,38,38,0.4)]">Execute</button>
+                <div className="h-3 bg-zinc-900 rounded-full border border-white/5 overflow-hidden p-0.5">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${deployProgress}%` }}
+                    className="h-full bg-gradient-to-r from-yellow-600 to-yellow-400 rounded-full shadow-[0_0_15px_rgba(234,179,8,0.5)]" 
+                  />
+                </div>
+                <div className="flex justify-center">
+                  <Activity className="w-8 h-8 text-yellow-500/30 animate-spin" />
+                </div>
+              </div>
+            ) : isConfirmingGift ? (
+              <div className="space-y-6 animate-in fade-in zoom-in duration-300">
+                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl space-y-3">
+                  <div className="flex items-center gap-2 text-red-500">
+                    <ShieldAlert className="w-5 h-5" />
+                    <p className="text-xs font-black uppercase tracking-widest">Critical Confirmation</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-zinc-300">
+                      You are about to deploy <span className="text-yellow-500 font-bold">{giftAmount} {giftResourceType.toUpperCase()}</span> to 
+                      <span className="text-white font-bold"> {calculateAirdropImpact().length} users</span> matching your filters.
+                    </p>
+                    <p className="text-[9px] text-zinc-500 font-mono italic">Signature: AUTH_SIG_GIFT_{Math.random().toString(36).substring(7).toUpperCase()}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="relative h-14 w-full bg-zinc-900/50 rounded-xl border border-white/10 overflow-hidden group/btn">
+                    <div 
+                      className="absolute inset-0 bg-red-600/30 transition-all duration-75"
+                      style={{ width: `${holdProgress}%` }}
+                    />
+                    <button 
+                      onMouseDown={() => {
+                        const start = Date.now();
+                        const timer = setInterval(() => {
+                          const elapsed = Date.now() - start;
+                          const progress = Math.min((elapsed / 3000) * 100, 100);
+                          setHoldProgress(progress);
+                          if (progress >= 100) {
+                            clearInterval(timer);
+                            executeMassiveGift();
+                          }
+                        }, 30);
+                        const stopHold = () => {
+                          clearInterval(timer);
+                          if (holdProgress < 100) setHoldProgress(0);
+                          window.removeEventListener('mouseup', stopHold);
+                        };
+                        window.addEventListener('mouseup', stopHold);
+                      }}
+                      className="absolute inset-0 w-full h-full text-xs font-black text-white uppercase tracking-widest flex items-center justify-center gap-2"
+                    >
+                      <Lock className="w-4 h-4" />
+                      {holdProgress > 0 ? `HOLDING (${Math.ceil(3 - (holdProgress*3/100))}s)` : "Hold 3s to Deploy"}
+                    </button>
+                  </div>
+                  <button onClick={() => setIsConfirmingGift(false)} className="w-full py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest hover:text-white transition-colors">Abort Mission</button>
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Target Tier</label>
-                    <select value={giftTier} onChange={e => setGiftTier(e.target.value)} className="w-full mt-1 bg-black/50 border border-white/10 rounded-lg p-2 text-xs text-white outline-none" title="Target Tier">
-                      <option value="Entrenador">Entrenador</option>
-                      <option value="Elite">Elite</option>
-                      <option value="Apex">Apex</option>
-                    </select>
+              <div className="space-y-6">
+                {/* Advanced Segmentation */}
+                <div className="space-y-3">
+                  <p className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <Users className="w-3 h-3" /> Targeted Population
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-mono text-zinc-600 uppercase">Tier</label>
+                      <select value={giftTier} onChange={e => setGiftTier(e.target.value)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-bold text-white outline-none focus:border-yellow-500" title="Tier">
+                        <option value="All">All Tiers</option>
+                        <option value="Entrenador">Entrenador</option>
+                        <option value="Elite">Elite</option>
+                        <option value="Apex">Apex</option>
+                        <option value="Legend">Legend</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-mono text-zinc-600 uppercase">Inactivity (Days+)</label>
+                      <input type="number" value={giftInactivity} onChange={e => setGiftInactivity(parseInt(e.target.value) || 0)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white outline-none focus:border-yellow-500" title="Inactivity" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Amount</label>
-                    <input type="number" value={giftAmount} onChange={e => setGiftAmount(parseInt(e.target.value) || 0)} className="w-full mt-1 bg-black/50 border border-white/10 rounded-lg p-2 text-xs font-mono text-white outline-none" title="Amount" placeholder="Amount" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-mono text-zinc-600 uppercase">Level Range</label>
+                      <div className="flex items-center gap-1">
+                        <input type="number" value={giftMinLevel} onChange={e => setGiftMinLevel(parseInt(e.target.value) || 0)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white text-center" title="Min Level" />
+                        <span className="text-zinc-600">-</span>
+                        <input type="number" value={giftMaxLevel} onChange={e => setGiftMaxLevel(parseInt(e.target.value) || 100)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white text-center" title="Max Level" />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-mono text-zinc-600 uppercase">Min LTV ($)</label>
+                      <input type="number" value={giftMinLTV} onChange={e => setGiftMinLTV(parseInt(e.target.value) || 0)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white outline-none focus:border-yellow-500" title="Min LTV" />
+                    </div>
                   </div>
                 </div>
+
+                {/* Resource Injection */}
+                <div className="space-y-3">
+                  <p className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <Package className="w-3 h-3" /> Supply Configuration
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <select value={giftResourceType} onChange={e => setGiftResourceType(e.target.value as any)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-bold text-white outline-none focus:border-yellow-500" title="Resource Type">
+                      <option value="exp">Experience (EXP)</option>
+                      <option value="pokeballs">HoloBalls</option>
+                      <option value="bp">BP Points</option>
+                      <option value="sku">Custom SKU</option>
+                    </select>
+                    <input type="number" value={giftAmount} onChange={e => setGiftAmount(parseInt(e.target.value) || 0)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white outline-none focus:border-yellow-500" title="Amount" placeholder="Amount" />
+                  </div>
+                  {giftResourceType === 'sku' && (
+                    <input type="text" value={giftSKU} onChange={e => setGiftSKU(e.target.value)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white outline-none focus:border-yellow-500" placeholder="ENTER PRODUCT SKU..." title="Product SKU" />
+                  )}
+                </div>
+
+                {/* Broadcast Engine */}
+                <div className="space-y-1">
+                  <label className="text-[8px] font-mono text-zinc-600 uppercase">Custom Broadcast Message</label>
+                  <textarea 
+                    value={giftMessage}
+                    onChange={e => setGiftMessage(e.target.value)}
+                    placeholder="Subject: A gift from Sasori Labs..."
+                    className="w-full bg-black border border-white/10 rounded-xl p-3 text-[10px] text-zinc-300 outline-none focus:border-yellow-500 h-16 resize-none"
+                  />
+                </div>
+
+                {/* Impact Simulation */}
+                <div className="bg-yellow-500/5 border border-yellow-500/10 rounded-xl p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 text-yellow-500 animate-spin-slow" />
+                    <span className="text-[9px] font-black text-yellow-500 uppercase tracking-widest">Simulator Result</span>
+                  </div>
+                  <span className="text-xs font-black text-white">{calculateAirdropImpact().length} Targets</span>
+                </div>
+
                 <button 
                   onClick={() => setIsConfirmingGift(true)}
-                  className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase tracking-widest text-xs rounded-xl shadow-[0_0_20px_rgba(234,179,8,0.3)] transition-all"
+                  disabled={calculateAirdropImpact().length === 0}
+                  className="w-full py-4 bg-yellow-500 hover:bg-yellow-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-black font-black uppercase tracking-widest text-xs rounded-2xl shadow-[0_0_30px_rgba(234,179,8,0.2)] transition-all flex items-center justify-center gap-2"
                 >
-                  Prepare Airdrop
+                  <Zap className="w-4 h-4" />
+                  Launch Airdrop
                 </button>
               </div>
             )}

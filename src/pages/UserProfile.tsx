@@ -2,8 +2,30 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { useNavigate, Link } from 'react-router-dom';
-import { LogOut, Shield, Zap, Package, ArrowLeft, Trophy, Star, Lock, Activity, Hexagon, Database, ChevronRight } from 'lucide-react';
+import { LogOut, Shield, Zap, Package, ArrowLeft, Trophy, Star, Lock, Activity, Hexagon, Database, ChevronRight, CheckCircle, Clock, Store, ShoppingCart, History, MapPin, Box } from 'lucide-react';
 import { cn } from '../lib/utils';
+
+interface ProductDetails {
+  id: string;
+  name: string;
+  image_url: string;
+  sku: string;
+}
+
+interface OrderItem {
+  id: string;
+  quantity: number;
+  price_at_purchase: number;
+  products: ProductDetails;
+}
+
+interface Order {
+  id: string;
+  created_at: string;
+  total_amount: number;
+  status: string;
+  order_items: OrderItem[];
+}
 
 interface UserProfileData {
   points: number;
@@ -25,6 +47,7 @@ export default function UserProfile() {
     email: ''
   });
   const [userCollection, setUserCollection] = useState<any[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
 
   const MAX_POINTS_PER_LEVEL = 1000;
   const progressPercentage = Math.min((profileData.points % MAX_POINTS_PER_LEVEL) / MAX_POINTS_PER_LEVEL * 100, 100);
@@ -58,7 +81,8 @@ export default function UserProfile() {
 
     await Promise.all([
       fetchUserProfile(session.user.id),
-      fetchUserCollection(session.user.id)
+      fetchUserCollection(session.user.id),
+      fetchUserOrders(session.user.id)
     ]);
     
     setLoading(false);
@@ -93,6 +117,34 @@ export default function UserProfile() {
 
     if (!error && data) {
       setUserCollection(data);
+    }
+  };
+
+  const fetchUserOrders = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        id,
+        created_at,
+        total_amount,
+        status,
+        order_items (
+          id,
+          quantity,
+          price_at_purchase,
+          products (
+            id,
+            name,
+            image_url,
+            sku
+          )
+        )
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setOrders(data as any[]);
     }
   };
 
@@ -395,6 +447,127 @@ export default function UserProfile() {
             </motion.div>
 
           </div>
+
+          {/* ORDER HISTORY & TRACKING */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="relative p-[1px] rounded-[2rem] overflow-hidden bg-gradient-to-b from-white/10 to-transparent"
+          >
+            <div className="relative bg-[#080808]/90 backdrop-blur-xl rounded-[calc(2rem-1px)] p-8">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                  <History className="w-5 h-5" />
+                </div>
+                <h2 className="text-lg font-bold tracking-widest uppercase text-white">Logistics & Requisitions</h2>
+              </div>
+
+              {orders.length === 0 ? (
+                <div className="min-h-[150px] flex flex-col items-center justify-center text-center border border-dashed border-white/10 rounded-2xl bg-white/[0.02]">
+                  <ShoppingCart className="w-8 h-8 text-zinc-600 mb-3" />
+                  <p className="text-sm font-medium text-zinc-400 uppercase tracking-widest">No requisitions found</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {orders.map((order) => {
+                    // Flexible Tracking Logic
+                    let StatusIcon = Clock;
+                    let statusColor = "text-yellow-500";
+                    let statusBg = "bg-yellow-500/10 border-yellow-500/20";
+                    let statusTitle = "Awaiting Payment";
+                    let statusSub = "Processing request...";
+
+                    if (order.status === 'paid') {
+                      StatusIcon = CheckCircle;
+                      statusColor = "text-green-500";
+                      statusBg = "bg-green-500/10 border-green-500/20";
+                      statusTitle = "Payment Confirmed";
+                      statusSub = "Odoo Sync Active";
+                    } else if (order.status === 'in_store_pickup') {
+                      StatusIcon = Store;
+                      statusColor = "text-cyan-400";
+                      statusBg = "bg-cyan-400/10 border-cyan-400/20";
+                      statusTitle = "Ready for Pickup";
+                      statusSub = "Visit Physical Store";
+                    } else if (order.status === 'delivered') {
+                      StatusIcon = MapPin;
+                      statusColor = "text-purple-400";
+                      statusBg = "bg-purple-400/10 border-purple-400/20";
+                      statusTitle = "Delivered";
+                      statusSub = "Requisition Complete";
+                    }
+
+                    return (
+                      <div key={order.id} className="group relative bg-zinc-900/50 border border-white/5 hover:border-white/10 rounded-2xl overflow-hidden transition-all duration-300">
+                        {/* Header: Tracking info */}
+                        <div className="flex flex-wrap items-center justify-between p-5 border-b border-white/5 bg-black/20 gap-4">
+                          <div className="flex items-center gap-4">
+                            <div className={cn("p-2.5 rounded-xl border", statusBg, statusColor)}>
+                              <StatusIcon className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className={cn("text-sm font-bold uppercase tracking-wider", statusColor)}>{statusTitle}</p>
+                              <p className="text-[10px] font-mono text-zinc-500 uppercase">{statusSub} • {new Date(order.created_at).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="text-right">
+                            <p className="text-lg font-black text-white">${order.total_amount.toFixed(2)}</p>
+                            <p className="text-[10px] font-mono text-zinc-500">ORDER: {order.id.split('-')[0]}</p>
+                          </div>
+                        </div>
+
+                        {/* Order Items */}
+                        <div className="p-5">
+                          <div className="space-y-3">
+                            {order.order_items.map((item) => (
+                              <div key={item.id} className="flex items-center gap-4 bg-black/40 p-3 rounded-xl border border-white/5 hover:bg-black/60 transition-colors">
+                                <div className="w-12 h-12 rounded-lg bg-zinc-800 overflow-hidden relative border border-white/10 flex-shrink-0">
+                                  {item.products?.image_url ? (
+                                    <img src={item.products.image_url} alt={item.products.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <Box className="w-5 h-5 text-zinc-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                                  )}
+                                  <div className="absolute inset-0 bg-cyan-500/10 mix-blend-overlay"></div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-bold text-white truncate">{item.products?.name || 'Unknown Item'}</p>
+                                  <div className="flex items-center gap-3 text-[10px] font-mono text-zinc-500 uppercase mt-1">
+                                    <span>QTY: {item.quantity}</span>
+                                    <span>•</span>
+                                    <span>SKU: <span className="text-cyan-400/70">{item.products?.sku || 'N/A'}</span></span>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-bold text-zinc-300">${item.price_at_purchase.toFixed(2)}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Rewards Footer (Only show if paid or completed) */}
+                        {['paid', 'in_store_pickup', 'delivered'].includes(order.status) && (
+                          <div className="px-5 py-3 bg-gradient-to-r from-cyan-900/10 via-transparent to-red-900/10 border-t border-white/5 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Star className="w-3.5 h-3.5 text-yellow-500" />
+                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Mission Rewards</span>
+                            </div>
+                            <div className="flex items-center gap-4 text-[11px] font-bold font-mono">
+                              <span className="text-cyan-400">+100 EXP</span>
+                              <span className="text-yellow-500">+{Math.floor(order.total_amount * 10)} BP</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </motion.div>
+
         </div>
       </main>
 

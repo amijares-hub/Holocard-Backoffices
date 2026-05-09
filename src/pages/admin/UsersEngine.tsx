@@ -18,6 +18,10 @@ interface UserProfileWithStats {
   tier: string;
   total_spent: number;
   last_activity: string;
+  captured_count: number;
+  shadow_notes?: string;
+  is_at_risk?: boolean;
+  archetype?: 'Whale' | 'Hunter' | 'Collector' | 'Newbie' | 'Sniper';
 }
 
 interface ActivityLog {
@@ -44,6 +48,7 @@ export default function UsersEngine() {
   const [editExp, setEditExp] = useState(0);
   const [editTier, setEditTier] = useState('entrenador');
   const [editPokeballs, setEditPokeballs] = useState(0);
+  const [editShadowNotes, setEditShadowNotes] = useState('');
   const [isConfirmingEdit, setIsConfirmingEdit] = useState(false);
 
   // Massive Gift State
@@ -78,19 +83,71 @@ export default function UsersEngine() {
     }
 
     // Map profiles to our local interface
-    const mappedUsers: UserProfileWithStats[] = (profiles || []).map(p => ({
-      id: p.id,
-      email: p.email || `user_${p.id.substring(0,5)}@holocard.io`, // Assuming email might be in auth but we use a fallback
-      level: p.level || 1,
-      exp: p.points || 0,
-      battle_pass_points: p.points || 0,
-      pokeballs: p.pokeballs || 0,
-      tier: p.tier || 'Entrenador',
-      total_spent: p.total_spent || 0,
-      last_activity: p.updated_at || new Date().toISOString()
-    }));
+    const mappedUsers: UserProfileWithStats[] = (profiles || []).map(p => {
+      const lastActivityDate = new Date(p.updated_at || Date.now());
+      const daysSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24);
+      
+      // CRM Logic: Predictive Churn (At Risk)
+      // High frequency users (Whales/Tiered) are at risk if inactive > 7 days
+      const isAtRisk = daysSinceActivity > 10 || (p.tier !== 'Entrenador' && daysSinceActivity > 7);
+
+      // Archetype Logic
+      let archetype: any = 'Newbie';
+      if (p.total_spent > 500) archetype = 'Whale';
+      else if (p.captured_count > 50) archetype = 'Collector';
+      else if (p.captured_count > 20) archetype = 'Hunter';
+      else if (p.total_spent > 0 && p.level > 10) archetype = 'Sniper';
+
+      return {
+        id: p.id,
+        email: p.email || `user_${p.id.substring(0,5)}@holocard.io`,
+        level: p.level || 1,
+        exp: p.points || 0,
+        battle_pass_points: p.points || 0,
+        pokeballs: p.pokeballs || 0,
+        tier: p.tier || 'Entrenador',
+        total_spent: p.total_spent || 0,
+        last_activity: lastActivityDate.toISOString(),
+        captured_count: p.captured_count || 0,
+        shadow_notes: p.shadow_notes || '',
+        is_at_risk: isAtRisk,
+        archetype: archetype
+      };
+    });
 
     setUsers(mappedUsers);
+  };
+
+  const exportAudiences = () => {
+    const headers = ['Email', 'Level', 'Tier', 'Total Spent', 'Archetype', 'Last Activity'];
+    const csvContent = [
+      headers.join(','),
+      ...filteredUsers.map(u => [
+        u.email,
+        u.level,
+        u.tier,
+        u.total_spent,
+        u.archetype,
+        u.last_activity
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `holocard_audience_${filterType}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setLiveLogs(prev => [{
+      id: Math.random().toString(),
+      timestamp: new Date().toISOString(),
+      message: `DATA EXPORT: ${filteredUsers.length} profiles exported for ad campaign.`,
+      type: 'system'
+    }, ...prev]);
   };
 
   const fetchVault = async (userId: string) => {
@@ -133,8 +190,7 @@ export default function UsersEngine() {
     if (filterType === 'whales') {
       filtered = filtered.filter(u => u.total_spent >= 500);
     } else if (filterType === 'dormant') {
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(u => new Date(u.last_activity) < sevenDaysAgo);
+      filtered = filtered.filter(u => u.is_at_risk);
     } else if (filterType === 'active_sub') {
       filtered = filtered.filter(u => u.tier.toLowerCase() !== 'entrenador');
     }
@@ -161,7 +217,8 @@ export default function UsersEngine() {
         level: editLevel, 
         points: editExp, 
         tier: editTier, 
-        pokeballs: editPokeballs 
+        pokeballs: editPokeballs,
+        shadow_notes: editShadowNotes
       })
       .eq('id', selectedUser.id);
     
@@ -176,7 +233,8 @@ export default function UsersEngine() {
       level: editLevel, 
       exp: editExp, 
       tier: editTier, 
-      pokeballs: editPokeballs
+      pokeballs: editPokeballs,
+      shadow_notes: editShadowNotes
     } : u));
     
     setIsConfirmingEdit(false);
@@ -186,7 +244,7 @@ export default function UsersEngine() {
     setLiveLogs(prev => [{
       id: Math.random().toString(), 
       timestamp: new Date().toISOString(), 
-      message: `ADMIN OVERRIDE: Profile ${selectedUser.email} rewritten in the mainframe.`, 
+      message: `ADMIN OVERRIDE: Profile ${selectedUser.email} rewritten in the mainframe. Nodes synced.`, 
       type: 'system'
     }, ...prev]);
   };
@@ -276,22 +334,30 @@ export default function UsersEngine() {
         {/* DATA GRID & FILTERS (Col Span 2) */}
         <div className="xl:col-span-2 space-y-6">
           <div className="flex flex-wrap gap-4 items-center justify-between p-4 bg-zinc-900/50 border border-white/5 rounded-2xl">
-            <div className="flex items-center gap-2">
-              {(['all', 'whales', 'dormant', 'active_sub'] as const).map(type => (
+          <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+            <div className="flex bg-zinc-900/50 rounded-xl p-1 border border-white/5">
+              {(['all', 'whales', 'dormant', 'active_sub'] as const).map((t) => (
                 <button
-                  key={type}
-                  onClick={() => setFilterType(type)}
+                  key={t}
+                  onClick={() => setFilterType(t)}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
-                    filterType === type 
-                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30" 
-                      : "bg-black/50 text-zinc-500 border border-white/5 hover:text-white"
+                    "px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                    filterType === t ? "bg-red-600 text-white shadow-lg shadow-red-600/20" : "text-zinc-500 hover:text-zinc-300"
                   )}
                 >
-                  {type.replace('_', ' ')}
+                  {t.replace('_', ' ')}
                 </button>
               ))}
             </div>
+            
+            <button 
+              onClick={exportAudiences}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl border border-white/10 transition-all text-[10px] font-black uppercase tracking-widest"
+            >
+              <Database className="w-4 h-4" />
+              Export Audience
+            </button>
+          </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
               <input 
@@ -316,25 +382,42 @@ export default function UsersEngine() {
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map(user => (
-                  <tr key={user.id} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
+                {filteredUsers.map((user) => (
+                  <tr 
+                    key={user.id} 
+                    className={cn(
+                      "group border-b border-white/5 hover:bg-white/[0.02] transition-colors cursor-pointer",
+                      user.is_at_risk && "bg-red-900/10 animate-pulse-slow border-l-2 border-l-red-600"
+                    )}
+                    onClick={() => openGodConsole(user)}
+                  >
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-900 to-black border border-cyan-500/30 flex items-center justify-center shadow-[0_0_10px_rgba(34,211,238,0.2)]">
                           <User className="w-5 h-5 text-cyan-400" />
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-white">{user.email}</p>
-                          <p className="text-[10px] font-mono text-zinc-500">{user.id}</p>
+                          <p className="text-sm font-bold text-white group-hover:text-red-500 transition-colors">
+                            {user.email}
+                            {user.is_at_risk && <span className="ml-2 text-[8px] text-red-500 uppercase tracking-tighter animate-pulse">⚠️ AT RISK</span>}
+                          </p>
+                          <p className="text-[10px] font-mono text-zinc-500">ID: {user.id.substring(0, 8)}</p>
                         </div>
                       </div>
                     </td>
                     <td className="p-4 text-center">
-                      <p className="text-sm font-bold text-white">Lvl {user.level}</p>
-                      <p className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest">{user.tier}</p>
+                      <div className="flex flex-col gap-1 items-center">
+                        <p className="text-sm font-bold text-white">Lvl {user.level}</p>
+                        <div className="flex gap-1">
+                          <span className="text-[8px] font-bold text-yellow-500 uppercase tracking-widest px-1.5 py-0.5 bg-yellow-500/10 rounded border border-yellow-500/20">{user.tier}</span>
+                          {user.archetype === 'Whale' && <span className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[8px] font-black flex items-center gap-1"><Star className="w-2 h-2" /> Whale</span>}
+                          {user.archetype === 'Collector' && <span className="px-1.5 py-0.5 rounded bg-cyan-600 text-white text-[8px] font-black">Collector</span>}
+                          {user.archetype === 'Hunter' && <span className="px-1.5 py-0.5 rounded bg-green-600 text-white text-[8px] font-black">Hunter</span>}
+                        </div>
+                      </div>
                     </td>
                     <td className="p-4 text-center">
-                      <p className="text-sm font-bold text-green-400">${user.total_spent}</p>
+                      <p className="text-sm font-bold text-green-400">${user.total_spent.toLocaleString()}</p>
                     </td>
                     <td className="p-4 text-center">
                       <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-full">
@@ -343,13 +426,22 @@ export default function UsersEngine() {
                       </div>
                     </td>
                     <td className="p-4 text-right">
-                      <button 
-                        onClick={() => openGodConsole(user)}
-                        className="p-2 rounded-lg bg-white/5 hover:bg-cyan-500/20 hover:text-cyan-400 text-zinc-400 transition-colors inline-flex items-center justify-center"
-                        title="Edit User"
-                      >
-                        <Crosshair className="w-5 h-5" />
-                      </button>
+                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          onClick={() => quickAirdrop(user)}
+                          className="p-2 rounded-lg bg-zinc-800 hover:bg-cyan-600/20 text-zinc-500 hover:text-cyan-400 transition-all border border-white/5"
+                          title="Quick Re-engage Airdrop"
+                        >
+                          <Zap className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => openGodConsole(user)}
+                          className="p-2 rounded-lg bg-white/5 hover:bg-red-600/20 hover:text-red-500 text-zinc-400 transition-colors inline-flex items-center justify-center border border-white/5"
+                          title="Open God Console"
+                        >
+                          <Crosshair className="w-5 h-5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -475,8 +567,8 @@ export default function UsersEngine() {
               <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
                 
                 {/* Hot Editor */}
-                <section>
-                  <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
+                <section className="space-y-6">
+                  <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 flex items-center gap-2">
                     <Activity className="w-4 h-4" /> Parameter Override
                   </h3>
                   
@@ -491,13 +583,36 @@ export default function UsersEngine() {
                     </div>
                   </div>
 
-                  <div className="mt-4">
+                  <div>
                     <label className="text-[10px] font-mono text-zinc-500 uppercase">Subscription Tier</label>
                     <select value={editTier} onChange={e => setEditTier(e.target.value)} className="w-full mt-1 bg-black border border-white/10 rounded-lg p-3 text-sm font-bold text-white uppercase outline-none focus:border-cyan-500" title="Subscription Tier">
                       <option value="Entrenador">Entrenador</option>
                       <option value="Elite">Elite</option>
                       <option value="Apex">Apex</option>
+                      <option value="Legend">Legend</option>
                     </select>
+                  </div>
+
+                  {/* Shadow Notes */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-mono text-zinc-500 uppercase">Shadow Notes (Admin Only)</label>
+                      <span className="text-[8px] text-red-500 animate-pulse font-bold">ENCRYPTED</span>
+                    </div>
+                    <textarea 
+                      value={editShadowNotes}
+                      onChange={(e) => setEditShadowNotes(e.target.value)}
+                      placeholder="Enter private observations about this subject..."
+                      className="w-full h-24 bg-black border border-white/10 rounded-xl px-4 py-3 text-xs font-medium text-zinc-300 focus:outline-none focus:border-red-600 resize-none custom-scrollbar"
+                    />
+                  </div>
+
+                  {/* Support History */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Support Interactions</h4>
+                    <div className="bg-black/40 rounded-xl border border-white/5 p-4">
+                      <p className="text-[10px] text-zinc-600 italic">No recent support tickets from this terminal.</p>
+                    </div>
                   </div>
                 </section>
 

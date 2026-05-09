@@ -67,7 +67,7 @@ export default function UsersEngine() {
 
   const fetchUsers = async () => {
     const { data: profiles, error } = await supabase
-      .from('profiles')
+      .from('user_profiles')
       .select('*');
 
     if (error) {
@@ -208,11 +208,35 @@ export default function UsersEngine() {
     fetchVault(user.id);
   };
 
+  const quickAirdrop = async (user: UserProfileWithStats) => {
+    // Quick loyalty pack: 500 EXP + 5 Pokéballs
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({
+        points: user.exp + 500,
+        pokeballs: user.pokeballs + 5,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', user.id);
+
+    if (!error) {
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, exp: u.exp + 500, pokeballs: u.pokeballs + 5 } : u));
+      setLiveLogs(prev => [{
+        id: Math.random().toString(),
+        timestamp: new Date().toISOString(),
+        message: `QUICK AIRDROP: Loyalty pack sent to ${user.email}. Nodes synchronized.`,
+        type: 'system'
+      }, ...prev]);
+    } else {
+      console.error('Airdrop failure:', error);
+    }
+  };
+
   const saveUserEdits = async () => {
     if (!selectedUser) return;
     
     const { error } = await supabase
-      .from('profiles')
+      .from('user_profiles')
       .update({ 
         level: editLevel, 
         points: editExp, 

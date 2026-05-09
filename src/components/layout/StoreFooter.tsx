@@ -18,9 +18,7 @@ export const StoreFooter = () => {
           {/* Brand Section */}
           <div className="lg:col-span-1 space-y-8">
             <div className="flex flex-col gap-2">
-              <h2 className="text-[32px] font-black italic uppercase tracking-tighter leading-none text-red-600 font-retro">
-                SASORI LABS
-              </h2>
+              <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/logo%20Holocard.jpg" alt="HoloCards" className="h-12 w-auto object-contain" />
             </div>
             
             <p className="text-[14px] text-zinc-500 leading-relaxed font-medium">

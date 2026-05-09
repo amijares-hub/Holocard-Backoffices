@@ -163,34 +163,45 @@ const RARITY_RANK = {
 };
 
 export default function Catalog() {
-  const { addToCart, toggleFavorite, isFavorite, storageImages } = useStore();
+  const { addToCart, toggleFavorite, isFavorite } = useStore();
   const [searchParams] = useSearchParams();
   const searchQuery = searchParams.get('q')?.toLowerCase() || '';
 
-  // Filtering State
+  // State
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [minRating, setMinRating] = useState<number>(0);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 5000]);
   const [sortBy, setSortBy] = useState<string>('char');
   const [currentPage, setCurrentPage] = useState(1);
-  const [quickViewProduct, setQuickViewProduct] = useState<CatalogProduct | null>(null);
+  const [quickViewProduct, setQuickViewProduct] = useState<any | null>(null);
   const [jumpPage, setJumpPage] = useState<string>('');
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
-  const productsWithImages = extendedProducts.map((p, index) => ({
-    ...p,
-    image: storageImages.length > 0 ? storageImages[index % storageImages.length] : p.image
-  }));
+  // Fetch real data from Backend
+  useEffect(() => {
+    const fetchCards = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/cards');
+        const data = await response.json();
+        setProducts(data);
+      } catch (err) {
+        console.error('Error fetching cards:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCards();
+  }, []);
 
-  const filteredProducts = productsWithImages
+  const filteredProducts = products
     .filter(p => p.name.toLowerCase().includes(searchQuery))
-    .filter(p => p.rating >= minRating)
+    .filter(p => (p.rating || 5) >= minRating)
     .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
     .sort((a, b) => {
       if (sortBy === 'price-asc') return a.price - b.price;
       if (sortBy === 'price-desc') return b.price - a.price;
-      if (sortBy === 'rarity-asc') return RARITY_RANK[a.rarity] - RARITY_RANK[b.rarity];
-      if (sortBy === 'rarity-desc') return RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity];
-      if (sortBy === 'set-az') return a.set.localeCompare(b.set);
       return 0;
     });
 
@@ -200,16 +211,14 @@ export default function Catalog() {
     currentPage * ITEMS_PER_PAGE
   );
 
-  const [quantities, setQuantities] = useState<Record<string, number>>(
-    Object.fromEntries(extendedProducts.map(p => [p.id, 1]))
+  // Skeleton Component
+  const ProductSkeleton = () => (
+    <div className="animate-pulse space-y-4">
+      <div className="bg-zinc-100 rounded-[40px] aspect-square w-full"></div>
+      <div className="h-4 bg-zinc-100 rounded w-3/4"></div>
+      <div className="h-4 bg-zinc-100 rounded w-1/2"></div>
+    </div>
   );
-
-  const updateQty = (id: string, delta: number) => {
-    setQuantities(prev => ({
-      ...prev,
-      [id]: Math.max(1, (prev[id] || 1) + delta)
-    }));
-  };
 
   return (
     <div className="min-h-screen bg-[#FDFDFD] text-[#1a1a1a]">
@@ -472,84 +481,73 @@ export default function Catalog() {
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-                {currentProducts.map((product) => (
-                  <motion.div 
-                    key={product.id}
-                    whileHover={{ y: -5 }}
-                    className="group"
-                  >
-                    <div className="bg-[#f5f5f5] rounded-3xl p-6 relative aspect-square flex items-center justify-center overflow-hidden">
-                      {product.tag && (
-                        <div className={cn(
-                          "absolute top-4 left-4 px-3 py-1.5 rounded-full text-[8px] font-black tracking-widest text-white shadow-xl z-20 font-retro pt-2",
-                          product.tag === 'OFERTA' ? "bg-red-600" : "bg-[#111]"
-                        )}>
-                          {product.tag}
+                {loading ? (
+                  [...Array(8)].map((_, i) => <ProductSkeleton key={i} />)
+                ) : (
+                  currentProducts.map((product) => (
+                    <motion.div 
+                      key={product.id}
+                      whileHover={{ y: -5 }}
+                      className="group"
+                    >
+                      <div className="bg-[#f5f5f5] rounded-3xl p-6 relative aspect-square flex items-center justify-center overflow-hidden">
+                        <img 
+                          src={product.image_url} 
+                          alt={product.name} 
+                          className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110" 
+                        />
+                        
+                        {/* Interaction Buttons */}
+                        <div className="absolute bottom-4 left-0 right-0 px-4 flex justify-center gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all translate-y-0 sm:translate-y-4 group-hover:translate-y-0 z-20">
+                          <button 
+                            onClick={() => setQuickViewProduct(product)}
+                            className="bg-white text-black p-2.5 sm:p-3 rounded-xl shadow-lg hover:bg-black hover:text-white transition-all transform active:scale-95"
+                          >
+                            <Search className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => addToCart(product)}
+                            className="bg-red-600 text-white p-2.5 sm:p-3 rounded-xl shadow-lg hover:bg-red-700 transition-all transform active:scale-95"
+                          >
+                            <ShoppingCart className="w-4 h-4" />
+                          </button>
                         </div>
-                      )}
-                      
-                      <img src={product.image} alt={product.name} className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110" />
-                      
-                      {/* Interaction Buttons - improved for mobile touch */}
-                      <div className="absolute bottom-4 left-0 right-0 px-4 flex justify-center gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all translate-y-0 sm:translate-y-4 group-hover:translate-y-0 z-20">
+
                         <button 
-                          onClick={() => setQuickViewProduct(product)}
-                          className="bg-white text-black p-2.5 sm:p-3 rounded-xl shadow-lg hover:bg-black hover:text-white transition-all transform active:scale-95"
-                        >
-                          <Search className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => addToCart({ id: product.id, name: product.name, price: product.price, image_url: product.image, rarity: product.rarity, stock: product.stock, set: product.set, isFeatured: false })}
-                          className="bg-red-600 text-white p-2.5 sm:p-3 rounded-xl shadow-lg hover:bg-red-700 transition-all transform active:scale-95"
-                        >
-                          <ShoppingCart className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <button 
-                        onClick={() => toggleFavorite({ id: product.id, name: product.name, price: product.price, image_url: product.image, rarity: product.rarity, stock: product.stock, set: product.set, isFeatured: false })}
-                        className={cn(
-                          "absolute top-4 right-4 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all bg-white shadow-lg z-20",
-                          isFavorite(product.id) ? "text-red-600" : "text-[#ccc] hover:text-red-600"
-                        )}
-                      >
-                        <Heart className={cn("w-4 h-4 sm:w-5 sm:h-5", isFavorite(product.id) && "fill-current")} />
-                      </button>
-
-                      {product.stock === 0 && (
-                        <div className="absolute inset-0 bg-white/40 flex items-center justify-center z-10"></div>
-                      )}
-                    </div>
-
-                    <div className="mt-6 space-y-3 px-1">
-                      <div className="space-y-1">
-                        <h3 className="text-[13px] font-bold text-[#111] h-10 line-clamp-2 leading-snug">{product.name}</h3>
-                        <div className="flex items-center gap-1">
-                          {[...Array(5)].map((_, i) => (
-                            <Star key={i} className={cn("w-3 h-3 fill-current", i < Math.floor(product.rating) ? "text-red-500" : "text-[#ddd]")} />
-                          ))}
-                          <span className="text-[10px] font-bold ml-1 text-[#999]">{product.rating}</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex items-end gap-2">
-                          <span className="text-xl font-black text-[#111] italic leading-none">{formatCurrency(product.price)}</span>
-                          {product.originalPrice && (
-                            <span className="text-[11px] text-[#999] line-through font-bold">{formatCurrency(product.originalPrice)}</span>
+                          onClick={() => toggleFavorite(product)}
+                          className={cn(
+                            "absolute top-4 right-4 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all bg-white shadow-lg z-20",
+                            isFavorite(product.id) ? "text-red-600" : "text-[#ccc] hover:text-red-600"
                           )}
+                        >
+                          <Heart className={cn("w-4 h-4 sm:w-5 sm:h-5", isFavorite(product.id) && "fill-current")} />
+                        </button>
+                      </div>
+
+                      <div className="mt-6 space-y-3 px-1">
+                        <div className="space-y-1">
+                          <h3 className="text-[13px] font-bold text-[#111] h-10 line-clamp-2 leading-snug">{product.name}</h3>
+                          <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">
+                            Recíbelo en {product.delivery_time}-{product.delivery_time + 2} días
+                          </p>
                         </div>
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-[8px] font-black uppercase text-[#999] tracking-widest font-retro pt-1">{product.rarity}</span>
-                          <div className="flex items-center gap-2">
-                             <div className={cn("w-1.5 h-1.5 rounded-full", product.stock > 0 ? "bg-[#34a853]" : "bg-red-600")}></div>
-                             <span className="text-[10px] font-bold uppercase text-[#666]">{product.stock > 0 ? 'En Stock' : 'Sin Stock'}</span>
+
+                        <div className="space-y-1">
+                          <div className="flex items-end gap-2">
+                            <span className="text-xl font-black text-[#111] italic leading-none">{formatCurrency(product.price)}</span>
+                          </div>
+                          <div className="flex items-center justify-between mt-2">
+                            <span className="text-[8px] font-black uppercase text-[#999] tracking-widest font-retro pt-1">{product.rarity}</span>
+                            <div className="flex items-center gap-2">
+                               <div className={cn("w-1.5 h-1.5 rounded-full", product.stock > 0 ? "bg-[#34a853]" : "bg-red-600")}></div>
+                               <span className="text-[10px] font-bold uppercase text-[#666]">{product.stock > 0 ? 'En Stock' : 'Sin Stock'}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  ))
+                )}
               </div>
 
               {/* Pagination */}

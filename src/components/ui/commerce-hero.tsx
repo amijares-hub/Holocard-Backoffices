@@ -47,11 +47,19 @@ export function CommerceHero() {
   return (
     <div className="w-full relative container px-2 mx-auto max-w-7xl min-h-screen">
 
-        <div className="mt-6 bg-zinc-900/30 rounded-2xl relative border border-white/5">
+        <div 
+          className="mt-6 rounded-2xl relative border border-white/5 overflow-hidden"
+          style={{
+            backgroundImage: "linear-gradient(to bottom, rgba(9, 9, 11, 0.5), rgba(9, 9, 11, 0.95)), url('/Imagenes/banner%201.png')",
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundAttachment: 'fixed'
+          }}
+        >
           <header className="flex items-center">
             <div className="w-full md:w-2/3 lg:w-1/2 bg-[#09090b]/95 backdrop-blur-sm p-4 rounded-br-2xl flex items-center gap-2 border-r border-b border-white/5">
-              <a href="#" className="text-xl font-bold bg-gradient-to-r from-red-500 to-red-600 bg-clip-text text-transparent">
-                Sasori_Labs
+              <a href="#" className="flex items-center">
+                <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/logo%20Holocard.jpg" alt="HoloCards" className="h-8 w-auto object-contain" />
               </a>
 
               <nav className="hidden lg:flex items-center justify-between w-full ml-8">
@@ -86,8 +94,8 @@ export function CommerceHero() {
                 >
                   <SheetHeader className="p-6 text-left border-b border-white/5">
                     <SheetTitle className="flex items-center justify-between">
-                      <a href="#" className="text-xl font-bold bg-gradient-to-r from-red-500 to-red-600 bg-clip-text text-transparent italic">
-                        Sasori_Labs
+                      <a href="#" className="flex items-center">
+                        <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/logo%20Holocard.jpg" alt="HoloCards" className="h-8 w-auto object-contain" />
                       </a>
                     </SheetTitle>
                   </SheetHeader>

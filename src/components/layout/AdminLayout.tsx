@@ -40,9 +40,8 @@ export default function AdminLayout() {
       {/* Sidebar */}
       <aside className="w-64 border-r border-[#27272a] bg-[#09090b] hidden lg:flex flex-col flex-shrink-0">
         <div className="p-6">
-          <div className="flex items-center gap-2 mb-8">
-            <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center font-bold">S</div>
-            <span className="text-xl font-bold tracking-tight">SASORI<span className="text-red-500">LABS</span></span>
+          <div className="flex items-center mb-8">
+            <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/logo%20Holocard.jpg" alt="HoloCards" className="h-8 w-auto object-contain" />
           </div>
           
           <nav className="space-y-1">
@@ -227,9 +226,8 @@ export default function AdminLayout() {
               >
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center font-bold">S</div>
-                      <span className="text-xl font-bold tracking-tight text-white">SASORI<span className="text-red-500">LABS</span></span>
+                    <div className="flex items-center">
+                      <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/logo%20Holocard.jpg" alt="HoloCards" className="h-8 w-auto object-contain" />
                     </div>
                     <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-zinc-400 hover:text-white">
                       <X className="w-6 h-6" />

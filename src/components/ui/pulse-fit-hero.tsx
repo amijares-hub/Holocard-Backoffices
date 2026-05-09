@@ -64,7 +64,10 @@ export function PulseFitHero({
         className
       )}
       style={{
-        background: "linear-gradient(180deg, #09090b 0%, #18181b 50%, #09090b 100%)",
+        backgroundImage: "linear-gradient(180deg, rgba(9,9,11,0.5) 0%, rgba(24,24,27,0.7) 50%, rgba(9,9,11,1) 100%), url('/Imagenes/banner%201.png')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed"
       }}
       role="banner"
       aria-label="Hero section"

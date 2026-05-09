@@ -19,6 +19,7 @@ import Storefront from './pages/Storefront';
 import Login from './pages/Login';
 import CheckoutFunnel from './pages/CheckoutFunnel';
 import AdminLayout from './components/layout/AdminLayout';
+import UserProfile from './pages/UserProfile';
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
@@ -65,7 +66,10 @@ export default function App() {
             <Route path="/checkout/:productId" element={<CheckoutFunnel />} />
             
             {/* Auth */}
-            <Route path="/login" element={session ? <Navigate to="/admin" /> : <Login />} />
+            <Route path="/login" element={session ? <Navigate to="/perfil" /> : <Login />} />
+
+            {/* User Profile */}
+            <Route path="/perfil" element={session ? <UserProfile /> : <Navigate to="/login" />} />
 
             {/* Protected Admin Routes */}
             <Route path="/admin" element={<AdminLayout />}>

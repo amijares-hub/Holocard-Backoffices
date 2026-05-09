@@ -81,8 +81,7 @@ export const StoreNavbar = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between gap-4">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group shrink-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-red-600 rounded-lg sm:rounded-xl flex items-center justify-center font-black italic text-lg sm:text-xl transform group-hover:rotate-12 transition-transform shadow-lg shadow-red-600/20 font-retro pt-1">S</div>
-            <span className="text-lg sm:text-xl font-black tracking-tighter uppercase italic block font-retro">SASORI<span className="text-red-500 underline decoration-2 underline-offset-4">LABS</span></span>
+            <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/logo%20Holocard.jpg" alt="HoloCards" className="h-10 sm:h-12 w-auto object-contain" />
           </Link>
 
           {/* Desktop Search Bar */}

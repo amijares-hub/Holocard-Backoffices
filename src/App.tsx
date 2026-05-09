@@ -20,6 +20,7 @@ import Login from './pages/Login';
 import CheckoutFunnel from './pages/CheckoutFunnel';
 import AdminLayout from './components/layout/AdminLayout';
 import UserProfile from './pages/UserProfile';
+import ProfileSettings from './pages/ProfileSettings';
 import UsersEngine from './pages/admin/UsersEngine';
 
 export default function App() {
@@ -71,6 +72,7 @@ export default function App() {
 
             {/* User Profile */}
             <Route path="/perfil" element={session ? <UserProfile /> : <Navigate to="/login" />} />
+            <Route path="/profile/settings" element={session ? <ProfileSettings /> : <Navigate to="/login" />} />
 
             {/* Protected Admin Routes */}
             <Route path="/admin" element={<AdminLayout />}>

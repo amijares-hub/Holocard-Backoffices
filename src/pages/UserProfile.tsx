@@ -240,6 +240,16 @@ export default function UserProfile() {
                 </div>
               </div>
 
+              <div className="mb-10">
+                <Link 
+                  to="/profile/settings"
+                  className="flex items-center justify-center gap-2 w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-500/50 rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-cyan-400 transition-all group/settings"
+                >
+                  <Shield className="w-3.5 h-3.5 group-hover/settings:rotate-12 transition-transform" />
+                  Manage Identity Matrix
+                </Link>
+              </div>
+
               {/* Progress Gauge */}
               <div className="space-y-3">
                 <div className="flex justify-between items-end">

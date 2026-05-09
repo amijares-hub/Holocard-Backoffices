@@ -51,6 +51,16 @@ export default function UsersEngine() {
   const [editShadowNotes, setEditShadowNotes] = useState('');
   const [isConfirmingEdit, setIsConfirmingEdit] = useState(false);
 
+  // God Console State
+  const [activeConsoleTab, setActiveConsoleTab] = useState<'mainframe' | 'identity' | 'transactions'>('mainframe');
+  const [editPhone, setEditPhone] = useState('');
+  const [editStreet, setEditStreet] = useState('');
+  const [editCity, setEditCity] = useState('');
+  const [editZip, setEditZip] = useState('');
+  const [editCountry, setEditCountry] = useState('');
+  const [userOrders, setUserOrders] = useState<any[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+
   // Ultimate Gift Spawner (Airdrop Pro) State
   const [isConfirmingGift, setIsConfirmingGift] = useState(false);
   const [giftTier, setGiftTier] = useState('All');
@@ -226,54 +236,57 @@ export default function UsersEngine() {
     setFilteredUsers(filtered);
   };
 
-  const openGodConsole = (user: UserProfileWithStats) => {
-    setSelectedUser(user);
-    setEditLevel(user.level);
-    setEditExp(user.exp);
-    setEditTier(user.tier);
-    setEditPokeballs(user.pokeballs);
-    setIsConfirmingEdit(false);
-    fetchVault(user.id);
-  };
-
-  const quickAirdrop = async (user: UserProfileWithStats) => {
-    // Quick loyalty pack: 500 EXP + 5 Pokéballs
-    const { error } = await supabase
-      .from('user_profiles')
-      .update({
-        points: user.exp + 500,
-        pokeballs: user.pokeballs + 5,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', user.id);
-
-    if (!error) {
-      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, exp: u.exp + 500, pokeballs: u.pokeballs + 5 } : u));
-      setLiveLogs(prev => [{
-        id: Math.random().toString(),
-        timestamp: new Date().toISOString(),
-        message: `QUICK AIRDROP: Loyalty pack sent to ${user.email}. Nodes synchronized.`,
-        type: 'system'
-      }, ...prev]);
-    } else {
-      console.error('Airdrop failure:', error);
+  const fetchUserOrders = async (userId: string) => {
+    setOrdersLoading(true);
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    
+    if (!error && data) {
+      setUserOrders(data);
     }
+    setOrdersLoading(false);
   };
+
+  useEffect(() => {
+    if (selectedUser) {
+      setEditLevel(selectedUser.level);
+      setEditExp(selectedUser.exp);
+      setEditTier(selectedUser.tier);
+      setEditPokeballs(selectedUser.pokeballs);
+      setEditShadowNotes(selectedUser.shadow_notes || '');
+      setEditPhone(selectedUser.phone || '');
+      setEditStreet(selectedUser.address_street || '');
+      setEditCity(selectedUser.address_city || '');
+      setEditZip(selectedUser.address_zip || '');
+      setEditCountry(selectedUser.address_country || '');
+      fetchVault(selectedUser.id);
+      fetchUserOrders(selectedUser.id);
+      setActiveConsoleTab('mainframe');
+    }
+  }, [selectedUser]);
 
   const saveUserEdits = async () => {
     if (!selectedUser) return;
-    
+
     const { error } = await supabase
       .from('user_profiles')
-      .update({ 
-        level: editLevel, 
-        points: editExp, 
-        tier: editTier, 
+      .update({
+        level: editLevel,
+        points: editExp,
+        tier: editTier,
         pokeballs: editPokeballs,
-        shadow_notes: editShadowNotes
+        shadow_notes: editShadowNotes,
+        phone: editPhone,
+        address_street: editStreet,
+        address_city: editCity,
+        address_zip: editZip,
+        address_country: editCountry
       })
       .eq('id', selectedUser.id);
-    
+
     if (error) {
       console.error('Error saving edits:', error);
       alert('REWRITE FAILED: Access denied or network error.');
@@ -281,12 +294,17 @@ export default function UsersEngine() {
     }
 
     setUsers(users.map(u => u.id === selectedUser.id ? {
-      ...u, 
-      level: editLevel, 
-      exp: editExp, 
-      tier: editTier, 
+      ...u,
+      level: editLevel,
+      exp: editExp,
+      tier: editTier,
       pokeballs: editPokeballs,
-      shadow_notes: editShadowNotes
+      shadow_notes: editShadowNotes,
+      phone: editPhone,
+      address_street: editStreet,
+      address_city: editCity,
+      address_zip: editZip,
+      address_country: editCountry
     } : u));
     
     setIsConfirmingEdit(false);
@@ -775,120 +793,255 @@ export default function UsersEngine() {
                 </button>
               </div>
 
+              {/* Tab Navigation */}
+              <div className="flex border-b border-white/5 bg-black/20">
+                {[
+                  { id: 'mainframe', label: 'Mainframe', icon: Activity },
+                  { id: 'identity', label: 'Identity', icon: Shield },
+                  { id: 'transactions', label: 'Logs', icon: History }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveConsoleTab(tab.id as any)}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-2 py-4 text-[10px] font-black uppercase tracking-widest transition-all relative",
+                      activeConsoleTab === tab.id ? "text-cyan-400 bg-cyan-400/5" : "text-zinc-500 hover:text-zinc-300"
+                    )}
+                  >
+                    <tab.icon className="w-3.5 h-3.5" />
+                    {tab.label}
+                    {activeConsoleTab === tab.id && (
+                      <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
               <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
                 
-                {/* Hot Editor */}
-                <section className="space-y-6">
-                  <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 flex items-center gap-2">
-                    <Activity className="w-4 h-4" /> Parameter Override
-                  </h3>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[10px] font-mono text-zinc-500 uppercase">Level</label>
-                      <input type="number" value={editLevel} onChange={e => setEditLevel(parseInt(e.target.value) || 1)} className="w-full mt-1 bg-black border border-white/10 rounded-lg p-3 text-lg font-black text-cyan-400 text-center outline-none focus:border-cyan-500" title="Level" placeholder="Level" />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-mono text-zinc-500 uppercase">Experience</label>
-                      <input type="number" value={editExp} onChange={e => setEditExp(parseInt(e.target.value) || 0)} className="w-full mt-1 bg-black border border-white/10 rounded-lg p-3 text-lg font-black text-white text-center outline-none" title="Experience" placeholder="Experience" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-mono text-zinc-500 uppercase">Subscription Tier</label>
-                    <select value={editTier} onChange={e => setEditTier(e.target.value)} className="w-full mt-1 bg-black border border-white/10 rounded-lg p-3 text-sm font-bold text-white uppercase outline-none focus:border-cyan-500" title="Subscription Tier">
-                      <option value="Entrenador">Entrenador</option>
-                      <option value="Elite">Elite</option>
-                      <option value="Apex">Apex</option>
-                      <option value="Legend">Legend</option>
-                    </select>
-                  </div>
-
-                  {/* Shadow Notes */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-mono text-zinc-500 uppercase">Shadow Notes (Admin Only)</label>
-                      <span className="text-[8px] text-red-500 animate-pulse font-bold">ENCRYPTED</span>
-                    </div>
-                    <textarea 
-                      value={editShadowNotes}
-                      onChange={(e) => setEditShadowNotes(e.target.value)}
-                      placeholder="Enter private observations about this subject..."
-                      className="w-full h-24 bg-black border border-white/10 rounded-xl px-4 py-3 text-xs font-medium text-zinc-300 focus:outline-none focus:border-red-600 resize-none custom-scrollbar"
-                    />
-                  </div>
-
-                  {/* Support History */}
-                  <div className="space-y-3">
-                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Support Interactions</h4>
-                    <div className="bg-black/40 rounded-xl border border-white/5 p-4">
-                      <p className="text-[10px] text-zinc-600 italic">No recent support tickets from this terminal.</p>
-                    </div>
-                  </div>
-                </section>
-
-                {/* Inventory Manager */}
-                <section>
-                  <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
-                    <Package className="w-4 h-4" /> Inventory Injection
-                  </h3>
-                  
-                  <div className="bg-cyan-900/10 border border-cyan-500/20 rounded-xl p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Hexagon className="w-8 h-8 text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-widest text-cyan-400">HoloBalls</p>
-                        <p className="text-[10px] text-zinc-500 font-mono">Current Balance</p>
+                {activeConsoleTab === 'mainframe' && (
+                  <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                    {/* Hot Editor */}
+                    <section className="space-y-6">
+                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 flex items-center gap-2">
+                        <Activity className="w-4 h-4" /> Parameter Override
+                      </h3>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] font-mono text-zinc-500 uppercase">Level</label>
+                          <input type="number" value={editLevel} onChange={e => setEditLevel(parseInt(e.target.value) || 1)} className="w-full mt-1 bg-black border border-white/10 rounded-lg p-3 text-lg font-black text-cyan-400 text-center outline-none focus:border-cyan-500" title="Level" placeholder="Level" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-mono text-zinc-500 uppercase">Experience</label>
+                          <input type="number" value={editExp} onChange={e => setEditExp(parseInt(e.target.value) || 0)} className="w-full mt-1 bg-black border border-white/10 rounded-lg p-3 text-lg font-black text-white text-center outline-none" title="Experience" placeholder="Experience" />
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3 bg-black rounded-lg p-1 border border-white/5">
-                      <button onClick={() => setEditPokeballs(Math.max(0, editPokeballs - 1))} className="w-8 h-8 flex items-center justify-center bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors" title="Decrease">-</button>
-                      <span className="w-8 text-center font-black text-lg text-white">{editPokeballs}</span>
-                      <button onClick={() => setEditPokeballs(editPokeballs + 1)} className="w-8 h-8 flex items-center justify-center bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white transition-colors" title="Increase">+</button>
-                    </div>
-                  </div>
-                </section>
-                
-                {/* Vault Preview */}
-                <section>
-                   <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
-                    <Database className="w-4 h-4" /> Collection Vault
-                  </h3>
-                  
-                  {vaultLoading ? (
-                    <div className="p-8 border border-white/5 rounded-xl text-center bg-black/20 animate-pulse">
-                      <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                      <p className="text-[10px] text-zinc-600 uppercase font-bold tracking-tighter">Accessing Datastream...</p>
-                    </div>
-                  ) : selectedUserVault.length > 0 ? (
-                    <div className="grid grid-cols-5 gap-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
-                      {selectedUserVault.map((card, i) => (
-                        <div key={i} className="aspect-[2/3] bg-zinc-900 rounded-md border border-white/5 overflow-hidden group relative cursor-help" title={card.card_name}>
-                          <img 
-                            src={card.image_url || '/Imagenes/card-back.png'} 
-                            alt={card.card_name}
-                            className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" 
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-1">
-                            <p className="text-[8px] font-bold text-white truncate">{card.card_name}</p>
+
+                      <div>
+                        <label className="text-[10px] font-mono text-zinc-500 uppercase">Subscription Tier</label>
+                        <select value={editTier} onChange={e => setEditTier(e.target.value)} className="w-full mt-1 bg-black border border-white/10 rounded-lg p-3 text-sm font-bold text-white uppercase outline-none focus:border-cyan-500" title="Subscription Tier">
+                          <option value="Entrenador">Entrenador</option>
+                          <option value="Elite">Elite</option>
+                          <option value="Apex">Apex</option>
+                          <option value="Legend">Legend</option>
+                        </select>
+                      </div>
+
+                      {/* Shadow Notes */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-mono text-zinc-500 uppercase">Shadow Notes (Admin Only)</label>
+                          <span className="text-[8px] text-red-500 animate-pulse font-bold">ENCRYPTED</span>
+                        </div>
+                        <textarea 
+                          value={editShadowNotes}
+                          onChange={(e) => setEditShadowNotes(e.target.value)}
+                          placeholder="Enter private observations about this subject..."
+                          className="w-full h-24 bg-black border border-white/10 rounded-xl px-4 py-3 text-xs font-medium text-zinc-300 focus:outline-none focus:border-red-600 resize-none custom-scrollbar"
+                        />
+                      </div>
+                    </section>
+
+                    {/* Inventory Manager */}
+                    <section>
+                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
+                        <Package className="w-4 h-4" /> Inventory Injection
+                      </h3>
+                      
+                      <div className="bg-cyan-900/10 border border-cyan-500/20 rounded-xl p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Hexagon className="w-8 h-8 text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-widest text-cyan-400">HoloBalls</p>
+                            <p className="text-[10px] text-zinc-500 font-mono">Current Balance</p>
                           </div>
                         </div>
-                      ))}
-                      {selectedUserVault.length >= 10 && (
-                        <div className="aspect-[2/3] bg-zinc-950 rounded-md border border-white/5 flex items-center justify-center">
-                          <p className="text-[8px] text-zinc-600 font-bold">+{selectedUserVault.length - 10} MORE</p>
+                        
+                        <div className="flex items-center gap-3 bg-black rounded-lg p-1 border border-white/5">
+                          <button onClick={() => setEditPokeballs(Math.max(0, editPokeballs - 1))} className="w-8 h-8 flex items-center justify-center bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors" title="Decrease">-</button>
+                          <span className="w-8 text-center font-black text-lg text-white">{editPokeballs}</span>
+                          <button onClick={() => setEditPokeballs(editPokeballs + 1)} className="w-8 h-8 flex items-center justify-center bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white transition-colors" title="Increase">+</button>
+                        </div>
+                      </div>
+                    </section>
+                    
+                    {/* Vault Preview */}
+                    <section>
+                       <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
+                        <Database className="w-4 h-4" /> Collection Vault
+                      </h3>
+                      
+                      {vaultLoading ? (
+                        <div className="p-8 border border-white/5 rounded-xl text-center bg-black/20 animate-pulse">
+                          <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                          <p className="text-[10px] text-zinc-600 uppercase font-bold tracking-tighter">Accessing Datastream...</p>
+                        </div>
+                      ) : selectedUserVault.length > 0 ? (
+                        <div className="grid grid-cols-5 gap-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
+                          {selectedUserVault.map((card, i) => (
+                            <div key={i} className="aspect-[2/3] bg-zinc-900 rounded-md border border-white/5 overflow-hidden group relative cursor-help" title={card.card_name}>
+                              <img 
+                                src={card.image_url || '/Imagenes/card-back.png'} 
+                                alt={card.card_name}
+                                className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" 
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-8 border border-dashed border-white/10 rounded-xl text-center bg-black/20">
+                          <Package className="w-6 h-6 text-zinc-700 mx-auto mb-2" />
+                          <p className="text-xs text-zinc-600 font-bold uppercase tracking-widest">Vault Empty</p>
                         </div>
                       )}
-                    </div>
-                  ) : (
-                    <div className="p-8 border border-dashed border-white/10 rounded-xl text-center bg-black/20">
-                      <Package className="w-6 h-6 text-zinc-700 mx-auto mb-2" />
-                      <p className="text-xs text-zinc-600 font-bold uppercase tracking-widest">Vault Empty</p>
-                      <p className="text-[10px] text-zinc-700">No entities detected in this sector.</p>
-                    </div>
-                  )}
-                </section>
+                    </section>
+                  </div>
+                )}
+
+                {activeConsoleTab === 'identity' && (
+                  <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <section className="space-y-6">
+                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 flex items-center gap-2">
+                        <Shield className="w-4 h-4" /> Identity Matrix
+                      </h3>
+
+                      <div className="space-y-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-mono text-zinc-500 uppercase">Primary Email (Immutable)</label>
+                          <div className="w-full bg-zinc-900 border border-white/5 rounded-lg p-3 text-sm text-zinc-400 font-mono">
+                            {selectedUser.email}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-mono text-zinc-500 uppercase">Phone Number</label>
+                          <input 
+                            type="text" 
+                            value={editPhone} 
+                            onChange={e => setEditPhone(e.target.value)} 
+                            className="w-full bg-black border border-white/10 rounded-lg p-3 text-sm text-white font-mono outline-none focus:border-cyan-500" 
+                            placeholder="+1 234 567 890" 
+                          />
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="space-y-4">
+                      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Logistics Data (Address)</h3>
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-mono text-zinc-600 uppercase">Street / Address</label>
+                          <input 
+                            type="text" 
+                            value={editStreet} 
+                            onChange={e => setEditStreet(e.target.value)} 
+                            className="w-full bg-black border border-white/10 rounded-lg p-3 text-xs text-zinc-300 outline-none focus:border-cyan-500" 
+                            placeholder="Street name, Number, Suite..." 
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-mono text-zinc-600 uppercase">City</label>
+                            <input 
+                              type="text" 
+                              value={editCity} 
+                              onChange={e => setEditCity(e.target.value)} 
+                              className="w-full bg-black border border-white/10 rounded-lg p-3 text-xs text-zinc-300 outline-none focus:border-cyan-500" 
+                              placeholder="City" 
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-mono text-zinc-600 uppercase">Zip Code</label>
+                            <input 
+                              type="text" 
+                              value={editZip} 
+                              onChange={e => setEditZip(e.target.value)} 
+                              className="w-full bg-black border border-white/10 rounded-lg p-3 text-xs text-zinc-300 outline-none focus:border-cyan-500" 
+                              placeholder="12345" 
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-mono text-zinc-600 uppercase">Country</label>
+                          <input 
+                            type="text" 
+                            value={editCountry} 
+                            onChange={e => setEditCountry(e.target.value)} 
+                            className="w-full bg-black border border-white/10 rounded-lg p-3 text-xs text-zinc-300 outline-none focus:border-cyan-500" 
+                            placeholder="Country" 
+                          />
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                )}
+
+                {activeConsoleTab === 'transactions' && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 flex items-center gap-2">
+                      <History className="w-4 h-4" /> Transaction History
+                    </h3>
+
+                    {ordersLoading ? (
+                      <div className="py-12 flex flex-col items-center justify-center gap-4">
+                        <RefreshCw className="w-8 h-8 text-cyan-500 animate-spin" />
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-black">Syncing with Odoo...</p>
+                      </div>
+                    ) : userOrders.length > 0 ? (
+                      <div className="space-y-3">
+                        {userOrders.map((order) => (
+                          <div key={order.id} className="bg-black border border-white/5 rounded-xl p-4 hover:border-white/20 transition-all group/order">
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-[10px] font-mono text-zinc-500 uppercase">ID: {order.id.split('-')[0]}</span>
+                              <span className={cn(
+                                "text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter shadow-[0_0_10px_rgba(0,0,0,0.5)]",
+                                order.status === 'paid' ? "bg-green-500/20 text-green-500 border border-green-500/30" : "bg-yellow-500/20 text-yellow-500 border border-yellow-500/30"
+                              )}>
+                                {order.status}
+                              </span>
+                            </div>
+                            <div className="flex items-end justify-between">
+                              <div>
+                                <p className="text-sm font-black text-white">${order.total_amount.toFixed(2)}</p>
+                                <p className="text-[10px] text-zinc-600 font-mono">{new Date(order.created_at).toLocaleDateString()}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[8px] text-zinc-700 uppercase font-bold">Admin Insights</p>
+                                <p className="text-[10px] text-green-500/50 font-mono">COGS: ${(order.total_amount * 0.7).toFixed(2)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-12 text-center bg-black/20 rounded-2xl border border-dashed border-white/5">
+                        <ShoppingCart className="w-8 h-8 text-zinc-800 mx-auto mb-3" />
+                        <p className="text-[10px] text-zinc-600 uppercase font-black">No transactions found</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
               </div>
 

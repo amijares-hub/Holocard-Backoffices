@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { ImageUploader } from './ImageUploader';
 import { BulkImageUploader } from './BulkImageUploader';
 import { cn } from '../../lib/utils';
+import { useTaxonomyStore } from '../../lib/taxonomyStore';
 
 interface ProductFormModalProps {
   isOpen: boolean;
@@ -28,18 +29,22 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
     base_stock: 0,
     status: 'draft' as 'active' | 'draft' | 'archived',
     image_url: '',
+    game_id: '',
     category_id: '',
+    expansion_id: '',
     tags: [] as string[],
     top_hits_images: [] as string[]
   });
 
-  const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
+  const { games, categories, expansions, fetchTaxonomy } = useTaxonomyStore();
   const [availableTags, setAvailableTags] = useState<{id: string, name: string}[]>([]);
   const [tagInput, setTagInput] = useState('');
 
+  console.log('Taxonomy in modal:', { games, categories, expansions });
+
   useEffect(() => {
     if (isOpen) {
-      fetchCategories();
+      fetchTaxonomy();
       fetchAvailableTags();
       if (product) {
         setFormData({
@@ -49,7 +54,9 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
           base_stock: product.base_stock || 0,
           status: product.status || 'draft',
           image_url: product.image_url || '',
+          game_id: product.game_id || '',
           category_id: product.category_id || '',
+          expansion_id: product.expansion_id || '',
           tags: [], // Will be loaded below
           top_hits_images: product.top_hits_images || []
         });
@@ -62,7 +69,9 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
           base_stock: 0,
           status: 'draft',
           image_url: '',
+          game_id: '',
           category_id: '',
+          expansion_id: '',
           tags: [],
           top_hits_images: []
         });
@@ -70,11 +79,6 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
     }
     setError(null);
   }, [isOpen, product]);
-
-  const fetchCategories = async () => {
-    const { data, error } = await supabase.from('categories').select('id, name');
-    if (!error && data) setCategories(data);
-  };
 
   const fetchAvailableTags = async () => {
     const { data, error } = await supabase.from('tags').select('id, name');
@@ -121,7 +125,9 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
         base_stock: formData.base_stock,
         status: formData.status,
         image_url: formData.image_url,
+        game_id: formData.game_id || null,
         category_id: formData.category_id || null,
+        expansion_id: formData.expansion_id || null,
         top_hits_images: formData.top_hits_images,
         slug: formData.name.toLowerCase().replace(/ /g, '-')
       };
@@ -278,20 +284,58 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Categoría Principal</label>
-                    <div className="relative">
-                      <Layers className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
-                      <select 
-                        value={formData.category_id}
-                        onChange={(e) => setFormData({...formData, category_id: e.target.value})}
-                        className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:border-red-500/50 transition-all appearance-none"
-                      >
-                        <option value="">Sin categoría asignada</option>
-                        {categories.map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.name}</option>
-                        ))}
-                      </select>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Franquicia (Juego)</label>
+                      <div className="relative">
+                        <Layers className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                        <select 
+                          value={formData.game_id}
+                          onChange={(e) => setFormData({...formData, game_id: e.target.value, category_id: '', expansion_id: ''})}
+                          className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:border-red-500/50 transition-all appearance-none"
+                        >
+                          <option value="">Selecciona Franquicia</option>
+                          {games.map(game => (
+                            <option key={game.id} value={game.id}>{game.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Categoría</label>
+                      <div className="relative">
+                        <Layers className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                        <select 
+                          value={formData.category_id}
+                          onChange={(e) => setFormData({...formData, category_id: e.target.value})}
+                          disabled={!formData.game_id}
+                          className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:border-red-500/50 transition-all appearance-none disabled:opacity-50"
+                        >
+                          <option value="">Selecciona Categoría</option>
+                          {categories.filter(c => c.game_id === formData.game_id).map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Expansión / Set</label>
+                      <div className="relative">
+                        <Layers className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                        <select 
+                          value={formData.expansion_id}
+                          onChange={(e) => setFormData({...formData, expansion_id: e.target.value})}
+                          disabled={!formData.game_id}
+                          className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:border-red-500/50 transition-all appearance-none disabled:opacity-50"
+                        >
+                          <option value="">Selecciona Expansión</option>
+                          {expansions.filter(e => e.game_id === formData.game_id).map(exp => (
+                            <option key={exp.id} value={exp.id}>{exp.name}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   </div>
                 </div>

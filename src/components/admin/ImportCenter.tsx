@@ -20,6 +20,7 @@ import Papa from 'papaparse';
 import { supabase } from '../../lib/supabase';
 import { cn } from '../../lib/utils';
 import { motion } from 'framer-motion';
+import { useTaxonomyStore } from '../../lib/taxonomyStore';
 
 interface ImportCenterProps {
   onSuccess?: () => void;
@@ -33,6 +34,12 @@ export const ImportCenter: React.FC<ImportCenterProps> = ({ onSuccess }) => {
   const [importStatus, setImportStatus] = useState<{success: number, total: number} | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { games, expansions, fetchTaxonomy } = useTaxonomyStore();
+
+  React.useEffect(() => {
+    fetchTaxonomy();
+  }, []);
 
   // Preparation States
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -100,8 +107,57 @@ export const ImportCenter: React.FC<ImportCenterProps> = ({ onSuccess }) => {
         base_stock: 1, // Default for individual cards
         description: `${card.oracle_text || ''}\n\n${card.flavor_text || ''}`,
         image_url: card.image_uris?.large || card.image_uris?.normal,
-        category_id: 'magic', // Placeholder/Logic to match DB
+        set_name: card.set_name,
         source: 'scryfall'
+      }));
+
+      setPreviewData(mapped);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  const fetchPokemonCards = async () => {
+    if (!apiConfig.query) return;
+    setIsParsing(true);
+    setError(null);
+    setPreviewData([]);
+
+    try {
+      let queryStr = apiConfig.query;
+      if (!queryStr.includes(':')) {
+        queryStr = `name:"*${queryStr}*"`;
+      }
+      
+      const headers: any = {};
+      if (apiConfig.apiKey) {
+        headers['X-Api-Key'] = apiConfig.apiKey;
+      }
+
+      const response = await fetch(`https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(queryStr)}`, { headers });
+      const data = await response.json();
+
+      if (!data.data || data.data.length === 0) {
+        throw new Error('No se encontraron cartas con ese término.');
+      }
+
+      const mapped = data.data.map((card: any) => ({
+        name: card.name,
+        sku: `PKM-${card.id.toUpperCase()}`,
+        base_price: parseFloat(
+          card.cardmarket?.prices?.averageSellPrice || 
+          card.cardmarket?.prices?.trendPrice || 
+          card.tcgplayer?.prices?.holofoil?.market || 
+          card.tcgplayer?.prices?.normal?.market || 
+          '0.00'
+        ),
+        base_stock: 1, // Default for individual cards
+        description: `${card.flavorText || ''}\n\nSupertype: ${card.supertype || ''}\nSubtypes: ${card.subtypes?.join(', ') || ''}\nRules: ${card.rules?.join('\n') || ''}`,
+        image_url: card.images?.large || card.images?.small,
+        set_name: card.set?.name,
+        source: 'pokemon'
       }));
 
       setPreviewData(mapped);
@@ -118,53 +174,67 @@ export const ImportCenter: React.FC<ImportCenterProps> = ({ onSuccess }) => {
     setError(null);
 
     try {
-      // 1. Resolve Category UUID (Smart Discovery)
-      // Determine the category name based on the source
       const source = previewData[0].source || 'unknown';
-      let categoryName = 'General';
-      if (source === 'scryfall') categoryName = 'Magic The Gathering';
-      if (source === 'pokemon') categoryName = 'Pokémon TCG';
+      
+      // Resolve Game UUID for Magic The Gathering or Pokémon TCG
+      let gameSearchName = 'magic';
+      if (source === 'pokemon') {
+        gameSearchName = 'pokemon';
+      }
+      const game = games.find(g => g.name.toLowerCase().includes(gameSearchName));
+      const gameId = game ? game.id : null;
 
-      // Check if category exists
-      let { data: catData, error: catError } = await supabase
-        .from('categories')
-        .select('id')
-        .eq('name', categoryName)
-        .single();
-
-      let categoryId: string;
-
-      if (catError && catError.code === 'PGRST116') {
-        // Category doesn't exist, create it
-        const { data: newCat, error: createError } = await supabase
+      // 1. Resolve Category UUID (Smart Discovery)
+      let categoryName = 'Cartas Sueltas';
+      let categoryId: string | null = null;
+      
+      if (gameId) {
+        let { data: catData, error: catError } = await supabase
           .from('categories')
-          .insert({ name: categoryName, slug: categoryName.toLowerCase().replace(/ /g, '-') })
-          .select()
+          .select('id')
+          .eq('name', categoryName)
+          .eq('game_id', gameId)
           .single();
 
-        if (createError) throw createError;
-        categoryId = newCat.id;
-      } else if (catError) {
-        throw catError;
-      } else {
-        categoryId = catData.id;
+        if (catError && catError.code === 'PGRST116') {
+          // Category doesn't exist, create it
+          const { data: newCat, error: createError } = await supabase
+            .from('categories')
+            .insert({ name: categoryName, slug: categoryName.toLowerCase().replace(/ /g, '-'), game_id: gameId })
+            .select()
+            .single();
+
+          if (!createError && newCat) categoryId = newCat.id;
+        } else if (catData) {
+          categoryId = catData.id;
+        }
       }
 
       // 2. Map and Sanitize Data
-      const mappedData = previewData.map(item => ({
-        name: String(item.name || ''),
-        sku: String(item.sku || `SKU-${Math.random().toString(36).substr(2, 9).toUpperCase()}`),
-        base_price: Number(parseFloat(item.base_price) || 0),
-        base_stock: Number(parseInt(item.base_stock) || 0),
-        description: String(item.description || ''),
-        image_url: item.image_url ? String(item.image_url) : null,
-        top_hits_images: Array.isArray(item.top_hits_images) ? item.top_hits_images : [],
-        slug: (item.name || '').toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/(^-|-$)/g, '') + '-' + Math.random().toString(36).substr(2, 5),
-        status: 'active',
-        category_id: categoryId // Use the real UUID
-      }));
+      const mappedData = previewData.map(item => {
+        // Find matching expansion by set_name
+        const matchedExpansion = expansions.find(e => 
+          e.name.toLowerCase() === (item.set_name || '').toLowerCase()
+        );
+        const expansionId = matchedExpansion ? matchedExpansion.id : null;
+
+        return {
+          name: String(item.name || ''),
+          sku: String(item.sku || `SKU-${Math.random().toString(36).substr(2, 9).toUpperCase()}`),
+          base_price: Number(parseFloat(item.base_price) || 0),
+          base_stock: Number(parseInt(item.base_stock) || 0),
+          description: String(item.description || ''),
+          image_url: item.image_url ? String(item.image_url) : null,
+          top_hits_images: Array.isArray(item.top_hits_images) ? item.top_hits_images : [],
+          slug: (item.name || '').toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '') + '-' + Math.random().toString(36).substr(2, 5),
+          status: 'active',
+          game_id: gameId,
+          category_id: categoryId, // Use the real UUID
+          expansion_id: expansionId
+        };
+      });
 
       const { data, error: importError } = await supabase
         .from('products')
@@ -328,6 +398,30 @@ export const ImportCenter: React.FC<ImportCenterProps> = ({ onSuccess }) => {
                 >
                   {isParsing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
                   Buscar Cartas en Scryfall
+                </button>
+              </div>
+            ) : apiConfig.source === 'pokemon' ? (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="space-y-2">
+                  <label className="text-[8px] font-black text-zinc-600 uppercase ml-1">Búsqueda de Cartas (Pokémon)</label>
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                    <input 
+                      type="text" 
+                      placeholder="ej. Pikachu o set.id:base1"
+                      value={apiConfig.query}
+                      onChange={e => setApiConfig({...apiConfig, query: e.target.value})}
+                      className="w-full bg-zinc-900 border border-white/5 rounded-xl pl-11 pr-4 py-3 text-[10px] font-bold text-white"
+                    />
+                  </div>
+                </div>
+                <button 
+                  onClick={fetchPokemonCards}
+                  disabled={isParsing}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-900/20 flex items-center justify-center gap-2"
+                >
+                  {isParsing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+                  Buscar Cartas en Pokémon TCG
                 </button>
               </div>
             ) : (

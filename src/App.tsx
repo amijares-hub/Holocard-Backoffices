@@ -9,7 +9,7 @@ import { supabase } from './lib/supabase';
 import { AnimatePresence, motion } from 'motion/react';
 import { StoreProvider, useStore } from './lib/StoreContext';
 import { ShieldAlert } from 'lucide-react';
-import { GlobalFloatingButton } from './components/ui/GlobalFloatingButton';
+import FloatingChatBot from './components/ui/FloatingChatBot';
 import { useThemeStore, updateDocumentTheme } from './lib/useThemeStore';
 
 // Pages
@@ -26,6 +26,7 @@ import UserProfile from './pages/UserProfile';
 import ProfileSettings from './pages/ProfileSettings';
 import UsersEngine from './pages/admin/UsersEngine';
 import SystemSettings from './pages/admin/SystemSettings';
+import ChatbotSettings from './pages/admin/ChatbotSettings';
 import HomeMainframe from './pages/admin/HomeMainframe';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { ProtectedRoute } from './components/admin/ProtectedRoute';
@@ -107,6 +108,7 @@ function AppInner({ session }: { session: any }) {
             <Route path="orders" element={<Orders />} />
             <Route path="pos" element={<POS />} />
             <Route path="users" element={<UsersEngine />} />
+            <Route path="chatbot" element={<ChatbotSettings />} />
             <Route path="system" element={<SystemSettings />} />
           </Route>
 
@@ -117,7 +119,7 @@ function AppInner({ session }: { session: any }) {
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </AnimatePresence>
-      <GlobalFloatingButton />
+      <FloatingChatBot />
     </Router>
   );
 }
@@ -128,9 +130,11 @@ export default function App() {
   const theme = useThemeStore((state) => state.theme);
 
   useEffect(() => {
-    // Sync initial theme
+    // Sync theme
     updateDocumentTheme(theme);
+  }, [theme]);
 
+  useEffect(() => {
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
         setSession(session);

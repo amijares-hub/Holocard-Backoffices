@@ -16,7 +16,8 @@ import {
   Palette,
   Layers,
   Sun,
-  Moon
+  Moon,
+  MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../../lib/supabase';
@@ -31,6 +32,7 @@ const navItems = [
   { icon: ShoppingCart, label: 'Orders', path: '/admin/orders' },
   { icon: CreditCard, label: 'POS Terminal', path: '/admin/pos' },
   { icon: Crosshair, label: 'Users Engine', path: '/admin/users' },
+  { icon: MessageSquare, label: 'Chatbot Settings', path: '/admin/chatbot' },
   { icon: Settings, label: 'System Settings', path: '/admin/system' },
 ];
 

@@ -81,6 +81,8 @@ interface HeroSector {
   expansionLogos: string[];
   collection_tag_id?: string;
   imageConfig?: ImageConfig;
+  featuredImage?: string;
+  featuredImageConfig?: ImageConfig;
 }
 
 interface HomepageConfig {
@@ -191,7 +193,8 @@ export default function HomeMainframe() {
               description: 'Descubre las últimas expansiones de Pokémon TCG.', buttonText: 'VER PRODUCTOS', buttonLink: '/catalog?game=pokemon',
               buttonBgColor: '#000000', buttonTextColor: '#FFFFFF', expansionLogos: [] 
             }),
-            imageConfig: designMap.hero?.pokemon?.imageConfig || DEFAULT_IMG_CONFIG
+            imageConfig: designMap.hero?.pokemon?.imageConfig || DEFAULT_IMG_CONFIG,
+            featuredImageConfig: designMap.hero?.pokemon?.featuredImageConfig || DEFAULT_IMG_CONFIG
           },
           magic: {
             ...(designMap.hero?.magic || { 
@@ -199,7 +202,8 @@ export default function HomeMainframe() {
               description: 'Explora el multiverso de Magic: The Gathering.', buttonText: 'VER PRODUCTOS', buttonLink: '/catalog?game=mtg',
               buttonBgColor: '#6D28D9', buttonTextColor: '#FFFFFF', expansionLogos: [] 
             }),
-            imageConfig: designMap.hero?.magic?.imageConfig || DEFAULT_IMG_CONFIG
+            imageConfig: designMap.hero?.magic?.imageConfig || DEFAULT_IMG_CONFIG,
+            featuredImageConfig: designMap.hero?.magic?.featuredImageConfig || DEFAULT_IMG_CONFIG
           }
         },
         shelves: designMap.shelves || {
@@ -265,7 +269,7 @@ export default function HomeMainframe() {
     }
   };
 
-  const restoreDefaults = (type: 'logo' | 'hero-pokemon' | 'hero-magic') => {
+  const restoreDefaults = (type: 'logo' | 'hero-pokemon' | 'hero-magic' | 'hero-featured-pokemon' | 'hero-featured-magic') => {
     if (!config || !initialConfig) return;
     addToHistory(config, `Reset ${type}`, 'Default');
     
@@ -275,6 +279,10 @@ export default function HomeMainframe() {
       setConfig({...config, hero: {...config.hero, pokemon: {...config.hero.pokemon, imageConfig: DEFAULT_IMG_CONFIG}}});
     } else if (type === 'hero-magic') {
       setConfig({...config, hero: {...config.hero, magic: {...config.hero.magic, imageConfig: DEFAULT_IMG_CONFIG}}});
+    } else if (type === 'hero-featured-pokemon') {
+      setConfig({...config, hero: {...config.hero, pokemon: {...config.hero.pokemon, featuredImageConfig: DEFAULT_IMG_CONFIG}}});
+    } else if (type === 'hero-featured-magic') {
+      setConfig({...config, hero: {...config.hero, magic: {...config.hero.magic, featuredImageConfig: DEFAULT_IMG_CONFIG}}});
     }
     showToast('success', 'Valores por defecto restaurados');
   };
@@ -355,7 +363,7 @@ export default function HomeMainframe() {
     </div>
   );
 
-  const AdvancedImageControls = ({ config: imgConfig, onUpdate, type }: { config: ImageConfig, onUpdate: (nc: ImageConfig) => void, type: 'logo' | 'hero-pokemon' | 'hero-magic' }) => (
+  const AdvancedImageControls = ({ config: imgConfig, onUpdate, type }: { config: ImageConfig, onUpdate: (nc: ImageConfig) => void, type: 'logo' | 'hero-pokemon' | 'hero-magic' | 'hero-featured-pokemon' | 'hero-featured-magic' }) => (
     <div className="p-6 bg-input/40 border border-border rounded-2xl space-y-4 transition-colors">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[8px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -369,10 +377,10 @@ export default function HomeMainframe() {
         </button>
       </div>
       <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-        <ControlGroup label="Escala" icon={Maximize2} value={imgConfig.scale} min={0.1} max={3} step={0.05} onChange={(v: number) => { addToHistory(config!, `${type}.scale`, v); onUpdate({...imgConfig, scale: v}); }} />
-        <ControlGroup label="Rotación" icon={RotateCw} value={imgConfig.rotate} min={-180} max={180} onChange={(v: number) => { addToHistory(config!, `${type}.rotate`, v); onUpdate({...imgConfig, rotate: v}); }} />
-        <ControlGroup label="Eje X (Offset)" icon={Move} value={imgConfig.x} min={-500} max={500} onChange={(v: number) => { addToHistory(config!, `${type}.x`, v); onUpdate({...imgConfig, x: v}); }} />
-        <ControlGroup label="Eje Y (Offset)" icon={Move} value={imgConfig.y} min={-500} max={500} onChange={(v: number) => { addToHistory(config!, `${type}.y`, v); onUpdate({...imgConfig, y: v}); }} />
+        <ControlGroup label="Escala" icon={Maximize2} value={imgConfig.scale} min={0.1} max={5} step={0.05} onChange={(v: number) => { addToHistory(config!, `${type}.scale`, v); onUpdate({...imgConfig, scale: v}); }} />
+        <ControlGroup label="Rotación" icon={RotateCw} value={imgConfig.rotate} min={-360} max={360} onChange={(v: number) => { addToHistory(config!, `${type}.rotate`, v); onUpdate({...imgConfig, rotate: v}); }} />
+        <ControlGroup label="Eje X (Offset)" icon={Move} value={imgConfig.x} min={-2000} max={2000} step={2} onChange={(v: number) => { addToHistory(config!, `${type}.x`, v); onUpdate({...imgConfig, x: v}); }} />
+        <ControlGroup label="Eje Y (Offset)" icon={Move} value={imgConfig.y} min={-2000} max={2000} step={2} onChange={(v: number) => { addToHistory(config!, `${type}.y`, v); onUpdate({...imgConfig, y: v}); }} />
         <ControlGroup label="Opacidad" icon={Sun} value={imgConfig.opacity} min={0} max={1} step={0.05} onChange={(v: number) => { addToHistory(config!, `${type}.opacity`, v); onUpdate({...imgConfig, opacity: v}); }} />
       </div>
     </div>
@@ -606,6 +614,16 @@ export default function HomeMainframe() {
                            label="Imagen del Personaje" 
                            currentUrl={config.hero[game as 'pokemon'|'magic'].bgImage} 
                            onUploadSuccess={(url) => setConfig({...config, hero: {...config.hero, [game]: {...config.hero[game as 'pokemon'|'magic'], bgImage: url}}})} 
+                         />
+                         <ImageUploader 
+                           label="Imagen Destacada (Cuadro)" 
+                           currentUrl={config.hero[game as 'pokemon'|'magic'].featuredImage || ''} 
+                           onUploadSuccess={(url) => setConfig({...config, hero: {...config.hero, [game]: {...config.hero[game as 'pokemon'|'magic'], featuredImage: url}}})} 
+                         />
+                         <AdvancedImageControls 
+                           type={game === 'pokemon' ? 'hero-featured-pokemon' : 'hero-featured-magic'}
+                           config={config.hero[game as 'pokemon'|'magic'].featuredImageConfig || DEFAULT_IMG_CONFIG} 
+                           onUpdate={(nc) => setConfig({...config, hero: {...config.hero, [game]: {...config.hero[game as 'pokemon'|'magic'], featuredImageConfig: nc}}})} 
                          />
                          <div className="space-y-2">
                             <label className="text-[8px] font-black uppercase text-zinc-500 tracking-widest">Color de Fondo Seccional</label>

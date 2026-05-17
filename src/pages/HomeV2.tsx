@@ -47,7 +47,7 @@ export default function HomeV2() {
   // Static product list for display
   const heroData = homepageDesign['ui_hero_split'] || {
     pokemon: {
-      bgImage: '/Imagenes/pikachu_hero.png',
+      bgImage: '/Imagenes/Pokemon/Diseño sin título (10).png',
       bgColor: '#FBBF24',
       title: 'POKÉMON',
       subtitle: 'TRADING CARD GAME',
@@ -125,9 +125,9 @@ export default function HomeV2() {
             <img
               src={heroData.pokemon.bgImage}
               alt="Pokémon Character"
-              className="absolute top-1/2 -translate-y-1/2 right-0 h-[110%] w-auto object-contain pointer-events-none z-0 transition-transform"
+              className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none z-0 transition-transform"
               style={{
-                transform: `translate(${heroData.pokemon.imageConfig?.x || 0}px, calc(-50% + ${heroData.pokemon.imageConfig?.y || 0}px)) scale(${heroData.pokemon.imageConfig?.scale || 1}) rotate(${heroData.pokemon.imageConfig?.rotate || 0}deg)`,
+                transform: `translate(${heroData.pokemon.imageConfig?.x || 0}px, ${heroData.pokemon.imageConfig?.y || 0}px) scale(${heroData.pokemon.imageConfig?.scale || 1}) rotate(${heroData.pokemon.imageConfig?.rotate || 0}deg)`,
                 opacity: heroData.pokemon.imageConfig?.opacity ?? 1
               }}
             />
@@ -150,7 +150,8 @@ export default function HomeV2() {
           )}
           
           <div className="relative z-10 flex flex-col h-full">
-            <div className="mb-2 flex flex-col justify-center">
+            <div className="mb-2 flex flex-row items-center w-full">
+              <div className="flex flex-col justify-center flex-1">
               <div className="flex items-center gap-2 bg-black/10 backdrop-blur-md w-fit px-3 py-1 rounded-full mb-3 border border-black/5">
                 <MapPin className="w-4 h-4 text-black" />
                 <span className="text-[10px] font-black text-black tracking-[0.2em] uppercase">Exclusivo Islas Canarias</span>
@@ -192,10 +193,29 @@ export default function HomeV2() {
               >
                 {heroData.pokemon.buttonText} <ArrowRight className="w-5 h-5" />
               </button>
+              </div>
+
+              <div className="hidden lg:flex w-[220px] xl:w-[280px] h-[160px] xl:h-[200px] mr-24 xl:mr-32 items-center justify-center relative pointer-events-none">
+                {heroData.pokemon.featuredImage ? (
+                  <img 
+                    src={heroData.pokemon.featuredImage} 
+                    alt="Destacado" 
+                    className="absolute inset-0 w-full h-full object-contain z-0 drop-shadow-2xl transition-transform" 
+                    style={{
+                      transform: `translate(${heroData.pokemon.featuredImageConfig?.x || 0}px, ${heroData.pokemon.featuredImageConfig?.y || 0}px) scale(${heroData.pokemon.featuredImageConfig?.scale || 1}) rotate(${heroData.pokemon.featuredImageConfig?.rotate || 0}deg)`,
+                      opacity: heroData.pokemon.featuredImageConfig?.opacity ?? 1
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full border-2 border-dashed border-black/20 rounded-2xl flex items-center justify-center">
+                    <span className="text-black/30 text-[10px] font-black uppercase tracking-[0.15em]">Imagen Destacada</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div 
-              className="mt-1 rounded-[1.5rem] p-3 lg:p-4 shadow-2xl border border-white flex flex-col overflow-hidden transition-colors duration-500"
+              className="mt-1 translate-y-[10%] rounded-[1.5rem] p-3 lg:p-4 shadow-2xl border border-white flex flex-col overflow-hidden transition-colors duration-500"
               style={{ backgroundColor: shelvesData.pokemonBg || '#FFFFFF' }}
             >
               <div className="flex items-center justify-between mb-2">
@@ -270,9 +290,9 @@ export default function HomeV2() {
             <img
               src={heroData.magic.bgImage}
               alt="Magic Character"
-              className="absolute top-1/2 -translate-y-1/2 right-0 h-[110%] w-auto object-contain pointer-events-none z-0 transition-transform"
+              className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none z-0 transition-transform"
               style={{
-                transform: `translate(${heroData.magic.imageConfig?.x || 0}px, calc(-50% + ${heroData.magic.imageConfig?.y || 0}px)) scale(${heroData.magic.imageConfig?.scale || 1}) rotate(${heroData.magic.imageConfig?.rotate || 0}deg)`,
+                transform: `translate(${heroData.magic.imageConfig?.x || 0}px, ${heroData.magic.imageConfig?.y || 0}px) scale(${heroData.magic.imageConfig?.scale || 1}) rotate(${heroData.magic.imageConfig?.rotate || 0}deg)`,
                 opacity: heroData.magic.imageConfig?.opacity ?? 1
               }}
             />
@@ -295,7 +315,8 @@ export default function HomeV2() {
           )}
           
           <div className="relative z-10 flex flex-col h-full">
-            <div className="mb-2 flex flex-col justify-center">
+            <div className="mb-2 flex flex-row items-center w-full">
+              <div className="flex flex-col justify-center flex-1">
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md w-fit px-3 py-1 rounded-full mb-3 border border-white/5">
                 <MapPin className="w-4 h-4 text-purple-400" />
                 <span className="text-[10px] font-black text-white tracking-[0.2em] uppercase">Exclusivo Islas Canarias</span>
@@ -338,10 +359,29 @@ export default function HomeV2() {
               >
                 {heroData.magic.buttonText} <ArrowRight className="w-5 h-5" />
               </button>
+              </div>
+
+              <div className="hidden lg:flex w-[220px] xl:w-[280px] h-[160px] xl:h-[200px] mr-24 xl:mr-32 items-center justify-center relative pointer-events-none">
+                {heroData.magic.featuredImage ? (
+                  <img 
+                    src={heroData.magic.featuredImage} 
+                    alt="Destacado" 
+                    className="absolute inset-0 w-full h-full object-contain z-0 drop-shadow-2xl transition-transform" 
+                    style={{
+                      transform: `translate(${heroData.magic.featuredImageConfig?.x || 0}px, ${heroData.magic.featuredImageConfig?.y || 0}px) scale(${heroData.magic.featuredImageConfig?.scale || 1}) rotate(${heroData.magic.featuredImageConfig?.rotate || 0}deg)`,
+                      opacity: heroData.magic.featuredImageConfig?.opacity ?? 1
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full border-2 border-dashed border-white/20 rounded-2xl flex items-center justify-center">
+                    <span className="text-white/30 text-[10px] font-black uppercase tracking-[0.15em]">Imagen Destacada</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div 
-              className="mt-1 backdrop-blur-3xl border border-white/10 rounded-[1.5rem] p-3 lg:p-4 shadow-2xl flex flex-col overflow-hidden transition-colors duration-500"
+              className="mt-1 translate-y-[10%] backdrop-blur-3xl border border-white/10 rounded-[1.5rem] p-3 lg:p-4 shadow-2xl flex flex-col overflow-hidden transition-colors duration-500"
               style={{ backgroundColor: shelvesData.magicBg ? `${shelvesData.magicBg}F2` : '#0A0A1FF2' }}
             >
               <div className="flex items-center justify-between mb-2">

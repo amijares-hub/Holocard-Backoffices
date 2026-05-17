@@ -135,9 +135,9 @@ export default function HomeV2() {
           {/* Left gradient to keep text legible over the character image */}
           <div className="absolute inset-0 z-[1] pointer-events-none" style={{ background: `linear-gradient(to right, ${heroData.pokemon.bgColor} 30%, transparent 70%)` }} />
 
-          {/* Expansion logos — absolute top-right */}
+          {/* Expansion logos — absolute top-right — desktop only to avoid clash with character image */}
           {heroData.pokemon.expansionLogos.length > 0 && (
-            <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2">
+            <div className="absolute top-3 right-3 z-10 hidden lg:flex flex-col items-end gap-2">
               {heroData.pokemon.expansionLogos.map((logo: string, idx: number) => (
                 <img
                   key={idx}
@@ -150,8 +150,22 @@ export default function HomeV2() {
           )}
           
           <div className="relative z-10 flex flex-col h-full">
+            {/* ── MOBILE ONLY: Pikachu absolutely positioned top-right ── */}
+            <div className="absolute right-0 top-0 lg:hidden w-[48%] max-w-[200px] h-[220px] sm:h-[260px] pointer-events-none z-[5]">
+              <img
+                src={heroData.pokemon.featuredImage || '/Imagenes/pikachu_hero.png'}
+                alt="Pikachu"
+                className="w-full h-full object-contain object-right-top drop-shadow-2xl"
+                style={heroData.pokemon.featuredImageConfig ? {
+                  transform: `translate(${heroData.pokemon.featuredImageConfig.x || 0}px, ${heroData.pokemon.featuredImageConfig.y || 0}px) scale(${heroData.pokemon.featuredImageConfig.scale || 1}) rotate(${heroData.pokemon.featuredImageConfig.rotate || 0}deg)`,
+                  opacity: heroData.pokemon.featuredImageConfig.opacity ?? 1
+                } : undefined}
+              />
+            </div>
+
             <div className="mb-2 flex flex-row items-center w-full">
-              <div className="flex flex-col justify-center flex-1">
+              {/* Text — gets right padding on mobile to clear the character image */}
+              <div className="flex flex-col justify-center flex-1 pr-[46%] lg:pr-0">
               <div className="flex items-center gap-2 bg-black/10 backdrop-blur-md w-fit px-3 py-1 rounded-full mb-3 border border-black/5">
                 <MapPin className="w-4 h-4 text-black" />
                 <span className="text-[10px] font-black text-black tracking-[0.2em] uppercase">Exclusivo Islas Canarias</span>
@@ -195,7 +209,8 @@ export default function HomeV2() {
               </button>
               </div>
 
-              <div className="flex w-[130px] sm:w-[170px] lg:w-[220px] xl:w-[280px] h-[110px] sm:h-[140px] lg:h-[160px] xl:h-[200px] lg:mr-24 xl:mr-32 items-center justify-center relative pointer-events-none shrink-0">
+              {/* DESKTOP ONLY: featured image in flex row */}
+              <div className="hidden lg:flex w-[220px] xl:w-[280px] h-[160px] xl:h-[200px] mr-24 xl:mr-32 items-center justify-center relative pointer-events-none">
                 <img
                   src={heroData.pokemon.featuredImage || '/Imagenes/pikachu_hero.png'}
                   alt="Pikachu"
@@ -294,9 +309,9 @@ export default function HomeV2() {
           {/* Left gradient to keep text legible */}
           <div className="absolute inset-0 z-[1] pointer-events-none" style={{ background: `linear-gradient(to right, ${heroData.magic.bgColor} 30%, transparent 70%)` }} />
 
-          {/* Expansion logos — absolute top-right */}
+          {/* Expansion logos — absolute top-right — desktop only to avoid clash with character image */}
           {heroData.magic.expansionLogos.length > 0 && (
-            <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2">
+            <div className="absolute top-3 right-3 z-10 hidden lg:flex flex-col items-end gap-2">
               {heroData.magic.expansionLogos.map((logo: string, idx: number) => (
                 <img
                   key={idx}
@@ -309,8 +324,22 @@ export default function HomeV2() {
           )}
           
           <div className="relative z-10 flex flex-col h-full">
+            {/* ── MOBILE ONLY: Planeswalker absolutely positioned top-right ── */}
+            <div className="absolute right-0 top-0 lg:hidden w-[46%] max-w-[190px] h-[200px] sm:h-[240px] pointer-events-none z-[5]">
+              <img
+                src={heroData.magic.featuredImage || '/Imagenes/magic_planeswalker_white.png'}
+                alt="Planeswalker"
+                className="w-full h-full object-contain object-right-top drop-shadow-2xl"
+                style={heroData.magic.featuredImageConfig ? {
+                  transform: `translate(${heroData.magic.featuredImageConfig.x || 0}px, ${heroData.magic.featuredImageConfig.y || 0}px) scale(${heroData.magic.featuredImageConfig.scale || 1}) rotate(${heroData.magic.featuredImageConfig.rotate || 0}deg)`,
+                  opacity: heroData.magic.featuredImageConfig.opacity ?? 1
+                } : undefined}
+              />
+            </div>
+
             <div className="mb-2 flex flex-row items-center w-full">
-              <div className="flex flex-col justify-center flex-1">
+              {/* Text — gets right padding on mobile to clear the character image */}
+              <div className="flex flex-col justify-center flex-1 pr-[44%] lg:pr-0">
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md w-fit px-3 py-1 rounded-full mb-3 border border-white/5">
                 <MapPin className="w-4 h-4 text-purple-400" />
                 <span className="text-[10px] font-black text-white tracking-[0.2em] uppercase">Exclusivo Islas Canarias</span>
@@ -355,7 +384,8 @@ export default function HomeV2() {
               </button>
               </div>
 
-              <div className="flex w-[130px] sm:w-[170px] lg:w-[220px] xl:w-[280px] h-[110px] sm:h-[140px] lg:h-[160px] xl:h-[200px] lg:mr-24 xl:mr-32 items-center justify-center relative pointer-events-none shrink-0">
+              {/* DESKTOP ONLY: featured image in flex row */}
+              <div className="hidden lg:flex w-[220px] xl:w-[280px] h-[160px] xl:h-[200px] mr-24 xl:mr-32 items-center justify-center relative pointer-events-none">
                 <img
                   src={heroData.magic.featuredImage || '/Imagenes/magic_planeswalker_white.png'}
                   alt="Planeswalker"

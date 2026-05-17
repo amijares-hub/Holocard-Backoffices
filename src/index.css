@@ -69,6 +69,13 @@
     color: var(--foreground);
     font-family: var(--font-sans);
     transition: background-color 0.3s ease, color 0.3s ease;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent layout bleed on small viewports */
+  * {
+    box-sizing: border-box;
   }
 
   /* Glassmorphism utility */
@@ -109,4 +116,14 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Custom thin scrollbar for admin panels */
+  .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+
+  /* Safe area padding for notched phones */
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .safe-top    { padding-top: env(safe-area-inset-top, 0px); }
 }

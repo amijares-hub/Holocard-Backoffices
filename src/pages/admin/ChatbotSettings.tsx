@@ -133,16 +133,16 @@ export default function ChatbotSettings() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-10 pb-20">
-      <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8 sm:mb-0">
         <div>
-          <h1 className="text-5xl font-black uppercase tracking-tighter text-foreground mb-2 italic">Chatbot Intel Hub</h1>
+          <h1 className="text-3xl sm:text-5xl font-black uppercase tracking-tighter text-foreground mb-2 italic">Chatbot Intel Hub</h1>
           <p className="text-muted-foreground font-mono text-xs uppercase tracking-widest flex items-center gap-2">
             <MessageSquare className="w-3.5 h-3.5 text-indigo-500" /> AI Support Core // Node Status: Online
           </p>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
         {/* FORM PANEL */}
         <form onSubmit={handleSave} className="lg:col-span-8 space-y-8">
           <div className="bg-card border border-border rounded-[2.5rem] overflow-hidden transition-all shadow-2xl">
@@ -181,7 +181,7 @@ export default function ChatbotSettings() {
 
             <div className="p-8 space-y-8">
               {/* GRID: NAME & COLOR */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
                 <div className="space-y-3">
                   <label htmlFor="bot-name" className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block ml-1">
                     Nombre del Bot

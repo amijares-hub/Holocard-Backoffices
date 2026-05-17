@@ -113,7 +113,7 @@ export default function FloatingChatBot() {
   return (
     <>
       {/* FLOATING ACTION BUTTON (FAB) */}
-      <div className="fixed bottom-6 right-6 z-[200]">
+      <div className="fixed bottom-6 right-4 sm:right-6 z-[200] safe-bottom">
         <motion.button
           onClick={() => setIsOpen(!isOpen)}
           whileHover={{ scale: 1.05 }}
@@ -145,7 +145,7 @@ export default function FloatingChatBot() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 30, scale: 0.9 }}
             transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-            className="fixed bottom-24 right-6 w-[360px] sm:w-[400px] h-[550px] bg-background/95 dark:bg-zinc-950/95 border border-border/80 rounded-[2.5rem] shadow-2xl z-[200] overflow-hidden flex flex-col backdrop-blur-xl"
+            className="fixed bottom-24 right-2 sm:right-6 w-[calc(100vw-16px)] sm:w-[400px] h-[75vh] sm:h-[550px] max-h-[600px] bg-background/95 dark:bg-zinc-950/95 border border-border/80 rounded-[2.5rem] shadow-2xl z-[200] overflow-hidden flex flex-col backdrop-blur-xl"
           >
             {/* Header */}
             <div 

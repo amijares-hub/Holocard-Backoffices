@@ -170,7 +170,7 @@ export default function SystemSettings() {
     <div className="max-w-7xl mx-auto space-y-10 pb-20">
       <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-5xl font-black uppercase tracking-tighter text-foreground mb-2 italic">Global Rules Engine</h1>
+          <h1 className="text-3xl sm:text-5xl font-black uppercase tracking-tighter text-foreground mb-2 italic">Global Rules Engine</h1>
           <p className="text-muted-foreground font-mono text-xs uppercase tracking-widest flex items-center gap-2">
              <Globe className="w-3 h-3 text-primary" /> Sovereignty Update // Node Status: 200 OK
           </p>
@@ -260,7 +260,7 @@ export default function SystemSettings() {
                   <h3 className="text-xs font-black uppercase tracking-[0.4em] text-red-500 flex items-center gap-2">
                     <Sparkles className="w-4 h-4" /> Global Multipliers
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                     <div className="space-y-4">
                       <label htmlFor="exp-multiplier" className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Base EXP Multiplier</label>
                       <input 
@@ -465,7 +465,7 @@ export default function SystemSettings() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-10">
                     <div className="space-y-4">
                       <label htmlFor="financial-margin" className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Global Profit Margin (Multiplier)</label>
                       <input 

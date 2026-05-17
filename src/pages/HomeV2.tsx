@@ -109,15 +109,15 @@ export default function HomeV2() {
   ];
 
   return (
-    <div className="h-screen pt-20 bg-background text-foreground font-sans selection:bg-red-500/30 overflow-hidden flex flex-col transition-colors duration-500">
+    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-red-500/30 transition-colors duration-500 overflow-x-hidden">
       <StoreNavbar />
 
       {/* --- HERO SECTION --- */}
-      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+      <div className="pt-20 flex flex-col lg:flex-row lg:h-[calc(100vh-80px)]">
         
         {/* POKÉMON PANEL */}
         <div 
-          className="relative flex-1 overflow-hidden flex flex-col p-4 lg:p-6 transition-all duration-500"
+          className="relative flex-1 min-h-[60vh] lg:min-h-0 overflow-hidden flex flex-col p-4 lg:p-6 transition-all duration-500"
           style={{ backgroundColor: heroData.pokemon.bgColor }}
         >
           {/* Character image — full visible, right-aligned */}
@@ -239,7 +239,7 @@ export default function HomeV2() {
                     activeFilter={activeFilterPokemon}
                   />
                 ) : (
-                  <div className="grid grid-cols-4 gap-2 mb-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
                     {POKEMON_PRODUCTS.map((prod, i) => (
                       <div key={i} className="group cursor-pointer">
                         <div className="aspect-square bg-zinc-50 rounded-xl flex items-center justify-center p-2 mb-1 border border-zinc-100 group-hover:border-yellow-400 transition-all duration-500 group-hover:shadow-xl">
@@ -282,7 +282,7 @@ export default function HomeV2() {
 
         {/* MAGIC PANEL */}
         <div 
-          className="relative flex-1 overflow-hidden flex flex-col p-4 lg:p-6 border-l border-white/5 transition-all duration-500"
+          className="relative flex-1 min-h-[60vh] lg:min-h-0 overflow-hidden flex flex-col p-4 lg:p-6 border-t lg:border-t-0 lg:border-l border-white/10 transition-all duration-500"
           style={{ backgroundColor: heroData.magic.bgColor }}
         >
           {/* Character image — full visible, right-aligned */}
@@ -405,7 +405,7 @@ export default function HomeV2() {
                     activeFilter={activeFilterMagic}
                   />
                 ) : (
-                  <div className="grid grid-cols-4 gap-2 mb-2">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
                     {MAGIC_PRODUCTS.map((prod, i) => (
                       <div key={i} className="group cursor-pointer">
                         <div className="aspect-square bg-white/5 rounded-xl flex items-center justify-center p-2 mb-1 border border-white/5 group-hover:border-purple-500 transition-all duration-500 group-hover:shadow-purple-500/20">
@@ -448,18 +448,18 @@ export default function HomeV2() {
       </div>
 
       {/* --- TRUST BAR --- */}
-      <div className="bg-card border-t border-border py-2 px-6">
-        <div className="w-full flex flex-row items-center justify-between gap-4">
+      <div className="bg-card border-t border-border py-3 px-4 lg:px-6">
+        <div className="w-full grid grid-cols-2 lg:grid-cols-4 gap-4">
           {TRUST_ITEMS.map((item, i) => (
-            <div key={i} className="flex-1 flex items-center gap-3 group">
-              <div className="p-2 bg-muted rounded-xl group-hover:bg-primary/10 transition-all duration-700 border border-border">
-                <item.icon className="w-5 h-5 text-primary transition-colors" />
+            <div key={i} className="flex items-center gap-3 group">
+              <div className="p-2 bg-muted rounded-xl group-hover:bg-primary/10 transition-all duration-700 border border-border shrink-0">
+                <item.icon className="w-4 h-4 lg:w-5 lg:h-5 text-primary transition-colors" />
               </div>
               <div className="flex flex-col">
-                <h4 className="text-[9px] font-black tracking-[0.15em] text-foreground uppercase">
+                <h4 className="text-[8px] lg:text-[9px] font-black tracking-[0.15em] text-foreground uppercase leading-tight">
                   {item.title}
                 </h4>
-                <p className="text-[8px] font-medium text-muted-foreground leading-tight">
+                <p className="text-[7px] lg:text-[8px] font-medium text-muted-foreground leading-tight hidden sm:block">
                   {item.desc}
                 </p>
               </div>
@@ -475,7 +475,7 @@ export default function HomeV2() {
             initial={{ opacity: 0, scale: 0.8, y: 50 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.8, y: 50 }}
-            className="fixed bottom-10 right-10 z-[200] max-w-sm"
+          className="fixed bottom-4 right-4 left-4 sm:left-auto sm:right-10 sm:bottom-10 z-[200] sm:max-w-sm"
           >
             <div className="bg-card backdrop-blur-3xl p-8 rounded-[2rem] border border-primary/30 shadow-[0_0_50px_rgba(var(--primary),0.2)] relative overflow-hidden group">
                <div className="absolute top-0 right-0 p-4">

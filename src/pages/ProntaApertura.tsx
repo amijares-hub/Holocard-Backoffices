@@ -1,7 +1,9 @@
 /**
  * ProntaApertura — Landing "Próximamente"
- * 100% Responsive — sin recortes en ningún dispositivo.
- * La imagen mantiene su proporción original a ancho completo.
+ * Usa <picture> con media queries para servir la imagen correcta según dispositivo:
+ *  - Móvil (< 768px)  → landing_teléfonos.png  (formato portrait optimizado)
+ *  - Desktop (≥ 768px) → landing.png            (formato landscape panorámico)
+ * El navegador solo descarga la imagen que corresponde → carga más rápida.
  * Para seguir desarrollando la tienda: /dev-store (ruta secreta)
  */
 export default function ProntaApertura() {
@@ -17,23 +19,30 @@ export default function ProntaApertura() {
         overflow: 'hidden',
       }}
     >
-      <img
-        src="/Imagenes/landing.png"
-        alt="HoloCards — Próximamente abrimos nuestra tienda de TCG online"
-        style={{
-          /* 
-            Ancho máximo = toda la pantalla.
-            Altura automática = respeta el ratio original → NUNCA se recorta.
-            En móvil portrait: imagen a ancho completo, barras negras arriba/abajo.
-            En desktop landscape: imagen ocupa toda la pantalla.
-          */
-          width: '100%',
-          height: 'auto',
-          maxHeight: '100vh',
-          objectFit: 'contain',
-          display: 'block',
-        }}
-      />
+      <picture style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {/* Móvil portrait: < 768px → imagen vertical optimizada para teléfonos */}
+        <source
+          media="(max-width: 767px)"
+          srcSet="/Imagenes/landing_tel%C3%A9fonos.png"
+        />
+        {/* Tablet y Desktop: ≥ 768px → imagen panorámica completa */}
+        <source
+          media="(min-width: 768px)"
+          srcSet="/Imagenes/landing.png"
+        />
+        {/* Fallback: usa la imagen de desktop por defecto */}
+        <img
+          src="/Imagenes/landing.png"
+          alt="HoloCards — Próximamente abrimos nuestra tienda de TCG online"
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            objectPosition: 'center center',
+            display: 'block',
+          }}
+        />
+      </picture>
     </div>
   );
 }

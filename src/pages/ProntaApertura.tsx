@@ -1,9 +1,8 @@
 /**
  * ProntaApertura — Landing "Próximamente"
- * 100% Responsive:
- *  - Móvil (portrait): object-cover centrado en el texto central
- *  - Tablet / Desktop: object-contain muestra la imagen completa
- * Para seguir desarrollando la tienda, accede a /dev-store (ruta secreta).
+ * 100% Responsive — sin recortes en ningún dispositivo.
+ * La imagen mantiene su proporción original a ancho completo.
+ * Para seguir desarrollando la tienda: /dev-store (ruta secreta)
  */
 export default function ProntaApertura() {
   return (
@@ -11,44 +10,28 @@ export default function ProntaApertura() {
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: '#000',
+        backgroundColor: '#000000',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',
       }}
     >
-      {/*
-        — Móvil portrait  → object-cover + object-center: llena toda la pantalla.
-          El texto central ("¡MUY PRONTO ABRIMOS NUESTRA WEB!") siempre visible.
-        — Tablet / Desktop → object-contain: imagen completa sin recorte.
-        La técnica de usar <picture> + media query garantiza el mejor resultado
-        visual sin JavaScript.
-      */}
       <img
         src="/Imagenes/landing.png"
-        alt="HoloCards — Próximamente, abrimos nuestra web de TCG online"
+        alt="HoloCards — Próximamente abrimos nuestra tienda de TCG online"
         style={{
+          /* 
+            Ancho máximo = toda la pantalla.
+            Altura automática = respeta el ratio original → NUNCA se recorta.
+            En móvil portrait: imagen a ancho completo, barras negras arriba/abajo.
+            En desktop landscape: imagen ocupa toda la pantalla.
+          */
           width: '100%',
-          height: '100%',
-          objectFit: 'cover',          /* móvil: cubre toda la pantalla */
-          objectPosition: 'center center',
+          height: 'auto',
+          maxHeight: '100vh',
+          objectFit: 'contain',
           display: 'block',
-        }}
-        /* En pantallas ≥ 768px cambiamos a contain via inline media override */
-        onLoad={(e) => {
-          const img = e.currentTarget;
-          const applyFit = () => {
-            if (window.innerWidth >= 768) {
-              img.style.objectFit = 'contain';
-              img.style.padding = '0';
-            } else {
-              img.style.objectFit = 'cover';
-              img.style.padding = '0';
-            }
-          };
-          applyFit();
-          window.addEventListener('resize', applyFit);
         }}
       />
     </div>

@@ -23,7 +23,7 @@ export default function ProntaApertura() {
         {/* Móvil portrait: < 768px → imagen vertical optimizada para teléfonos */}
         <source
           media="(max-width: 767px)"
-          srcSet="/Imagenes/landing_tel%C3%A9fonos.png"
+          srcSet="/Imagenes/landing-movil.png"
         />
         {/* Tablet y Desktop: ≥ 768px → imagen panorámica completa */}
         <source

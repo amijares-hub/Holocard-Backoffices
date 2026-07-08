@@ -71,6 +71,22 @@
     transition: background-color 0.3s ease, color 0.3s ease;
     overflow-x: hidden;
     -webkit-tap-highlight-color: transparent;
+    /* ── Configuración para Pestaña Completa (Por Defecto) ─────────────────
+       En navegador/Vercel, el body ocupa todo el viewport. */
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+  }
+
+  /* ── Configuración EXCLUSIVA para el Popup de Extensión ─────────────────
+     Chrome limita el popup a 800px. Esta media query activa las dimensiones
+     fijas solo en ese contexto compacto, sin romper la pestaña completa. */
+  @media screen and (max-width: 800px) {
+    body {
+      width: 800px;
+      height: 600px;
+    }
+  
   }
 
   /* Prevent layout bleed on small viewports */

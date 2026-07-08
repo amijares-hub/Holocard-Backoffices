@@ -17,7 +17,8 @@ import {
   Layers,
   Sun,
   Moon,
-  MessageSquare
+  MessageSquare,
+  Maximize2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../../lib/supabase';
@@ -45,6 +46,17 @@ export default function AdminLayout() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+  };
+
+  // ── Fase 25: Abrir en pestaña completa ────────────────────────────────────
+  // Detecta el contexto de extensión y abre el panel en una pestaña nativa.
+  // En desarrollo/Vercel, abre una nueva ventana del navegador.
+  const openInFullTab = () => {
+    if (typeof chrome !== 'undefined' && chrome.tabs && chrome.runtime) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
+    } else {
+      window.open('/', '_blank');
+    }
   };
 
   return (
@@ -131,6 +143,17 @@ export default function AdminLayout() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* ── Botón Full Screen (Fase 25) ─────────────────────────────── */}
+            <button
+              onClick={openInFullTab}
+              className="relative p-2 text-muted-foreground hover:text-red-500 hover:bg-red-600/10 rounded-lg transition-all group"
+              title="Abrir en pestaña completa"
+            >
+              {/* Anillo pulsante — señal visual de poder */}
+              <span className="absolute inset-0 rounded-lg ring-1 ring-red-500/0 group-hover:ring-red-500/40 group-hover:animate-pulse transition-all" />
+              <Maximize2 className="w-5 h-5 transition-transform group-hover:scale-110" />
+            </button>
+
             <button className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg relative transition-all" title="Notifications">
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-background"></span>

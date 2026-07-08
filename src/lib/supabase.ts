@@ -5,7 +5,19 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder-project.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // ── Fix crítico para Chrome Extension ───────────────────────────────────
+    // Fuerza localStorage explícito. Sin esto, en contextos de extensión
+    // Supabase puede degradar a sessionStorage (efímero) y perder la sesión
+    // al pasar del popup a la pestaña completa.
+    persistSession: true,
+    storageKey: 'hc-admin-auth',
+    storage: window.localStorage,
+    autoRefreshToken: true,
+    detectSessionInUrl: false, // no necesario en chrome-extension://
+  },
+});
 
 if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
   console.warn(

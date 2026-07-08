@@ -17,7 +17,8 @@ import {
   ChevronRight,
   Calendar,
   Loader2,
-  Printer
+  Printer,
+  Trash2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { cn, formatCurrency } from '../../lib/utils';
@@ -57,6 +58,10 @@ export default function Orders() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [ordersToDelete, setOrdersToDelete] = useState<string[]>([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Stats
   const [stats, setStats] = useState({
@@ -125,10 +130,71 @@ export default function Orders() {
     setIsUpdating(false);
   };
 
+  const confirmDelete = async () => {
+    setIsDeleting(true);
+    
+    // Paso A: Restaurar Stock
+    const { data: items } = await supabase
+      .from('order_items')
+      .select('product_id, quantity')
+      .in('order_id', ordersToDelete);
+      
+    if (items && items.length > 0) {
+      const restockMap = items.reduce((acc: Record<string, number>, item: any) => {
+        acc[item.product_id] = (acc[item.product_id] || 0) + item.quantity;
+        return acc;
+      }, {});
+
+      for (const [productId, qty] of Object.entries(restockMap)) {
+        const { data: product } = await supabase
+          .from('products')
+          .select('base_stock')
+          .eq('id', productId)
+          .single();
+          
+        if (product) {
+          await supabase
+            .from('products')
+            .update({ base_stock: product.base_stock + (qty as number) })
+            .eq('id', productId);
+        }
+      }
+    }
+
+    // Paso B: Borrado en Cascada
+    await supabase.from('orders').delete().in('id', ordersToDelete);
+    
+    setOrdersToDelete([]);
+    setSelectedOrders([]);
+    setShowDeleteModal(false);
+    setIsDeleting(false);
+    fetchOrders(); // Actualiza la lista y los ingresos
+  };
+
+  const initiateDelete = (orderIds: string[]) => {
+    setOrdersToDelete(orderIds);
+    setShowDeleteModal(true);
+  };
+
   const filteredOrders = orders.filter(o => 
     o.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
     o.customer_email.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const toggleSelectAll = () => {
+    if (selectedOrders.length === filteredOrders.length && filteredOrders.length > 0) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders(filteredOrders.map(o => o.id));
+    }
+  };
+
+  const toggleSelectOrder = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setSelectedOrders(prev => 
+      prev.includes(id) ? prev.filter(oId => oId !== id) : [...prev, id]
+    );
+  };
 
   const handlePrint = () => {
     window.print();
@@ -220,6 +286,16 @@ export default function Orders() {
             />
           </div>
           <div className="flex items-center gap-2">
+            {selectedOrders.length > 0 && (
+              <button 
+                onClick={() => initiateDelete(selectedOrders)}
+                className="p-3 bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all rounded-xl border border-red-500/30 font-black text-[10px] uppercase tracking-widest flex items-center gap-2"
+                title="Eliminar seleccionados"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden md:inline">Eliminar ({selectedOrders.length})</span>
+              </button>
+            )}
             <button className="p-3 text-muted-foreground hover:text-foreground transition-colors bg-muted/50 rounded-xl border border-border" title="Filtrar pedidos">
               <Filter className="w-5 h-5" />
             </button>
@@ -233,6 +309,14 @@ export default function Orders() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-muted/30 border-b border-border transition-colors">
+                <th className="p-6 w-12 text-center">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedOrders.length > 0 && selectedOrders.length === filteredOrders.length}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded bg-background border-border accent-red-500 cursor-pointer"
+                  />
+                </th>
                 <th className="p-6 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground font-mono italic">ID Pedido</th>
                 <th className="p-6 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground font-mono italic">Cliente</th>
                 <th className="p-6 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground font-mono italic text-center">Fecha</th>
@@ -242,14 +326,34 @@ export default function Orders() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
-                <tr>
-                  <td colSpan={5} className="p-20 text-center">
-                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-red-500 opacity-50" />
-                  </td>
-                </tr>
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={`skeleton-${i}`} className="bg-white/[0.01] animate-pulse border-b border-border">
+                    <td className="p-6 text-center">
+                      <div className="w-4 h-4 bg-accent rounded mx-auto"></div>
+                    </td>
+                    <td className="p-6">
+                      <div className="h-4 bg-accent rounded w-24"></div>
+                    </td>
+                    <td className="p-6">
+                      <div className="flex flex-col gap-2">
+                        <div className="h-3 bg-accent rounded w-32"></div>
+                        <div className="h-2 bg-accent/50 rounded w-20"></div>
+                      </div>
+                    </td>
+                    <td className="p-6">
+                      <div className="h-3 bg-accent rounded w-20 mx-auto"></div>
+                    </td>
+                    <td className="p-6">
+                      <div className="h-6 bg-accent rounded-lg w-20 mx-auto"></div>
+                    </td>
+                    <td className="p-6">
+                      <div className="h-4 bg-accent rounded w-16 ml-auto"></div>
+                    </td>
+                  </tr>
+                ))
               ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-20 text-center text-zinc-500 uppercase text-xs font-black tracking-widest">No se encontraron pedidos</td>
+                  <td colSpan={6} className="p-20 text-center text-zinc-500 uppercase text-xs font-black tracking-widest">No se encontraron pedidos</td>
                 </tr>
               ) : filteredOrders.map((order, i) => {
                 const status = statusConfig[order.status];
@@ -262,6 +366,14 @@ export default function Orders() {
                     onClick={() => setSelectedOrder(order)}
                     className="hover:bg-white/[0.03] transition-colors cursor-pointer group"
                   >
+                    <td className="p-6 text-center" onClick={e => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedOrders.includes(order.id)}
+                        onChange={(e) => toggleSelectOrder(e as any, order.id)}
+                        className="w-4 h-4 rounded bg-background border-border accent-red-500 cursor-pointer"
+                      />
+                    </td>
                     <td className="p-6">
                       <p className="font-mono font-black text-foreground group-hover:text-primary transition-colors uppercase tracking-tighter">
                         #{order.id.slice(0, 8)}
@@ -291,6 +403,13 @@ export default function Orders() {
                         <p className="font-mono font-black text-foreground italic text-lg transition-colors">
                           {formatCurrency(order.total_amount)}
                         </p>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); initiateDelete([order.id]); }}
+                          className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                          title="Eliminar pedido"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                         <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-all group-hover:translate-x-1" />
                       </div>
                     </td>
@@ -513,6 +632,52 @@ export default function Orders() {
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-card border border-red-500/30 rounded-3xl p-8 max-w-md w-full shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                <AlertCircle className="w-24 h-24 text-red-500" />
+              </div>
+              <h3 className="text-2xl font-black italic text-foreground uppercase tracking-tighter mb-2">Advertencia Táctica</h3>
+              <p className="text-sm text-muted-foreground mb-6 font-medium">
+                ¿Estás seguro de eliminar {ordersToDelete.length} pedido{ordersToDelete.length !== 1 ? 's' : ''}? Esta acción 
+                <span className="text-red-500 font-bold"> sumará el inventario asociado de vuelta al stock base</span> y eliminará los registros permanentemente.
+              </p>
+              
+              <div className="flex gap-3 relative z-10">
+                <button 
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-3 bg-muted hover:bg-muted/80 text-foreground rounded-xl font-bold transition-all text-xs uppercase tracking-widest"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={confirmDelete}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition-all text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 disabled:opacity-50"
+                >
+                  {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  {isDeleting ? 'Purgando...' : 'Confirmar Eliminación'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, Save, Package, Tag, Hash, Euro, 
-  Database, Activity, Loader2, AlertCircle, Layers
+  Database, Activity, Loader2, AlertCircle, Layers, ChevronDown
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ImageUploader } from './ImageUploader';
 import { BulkImageUploader } from './BulkImageUploader';
 import { cn } from '../../lib/utils';
 import { useTaxonomyStore } from '../../lib/taxonomyStore';
+import ClickAwayListener from 'react-click-away-listener';
 
 interface ProductFormModalProps {
   isOpen: boolean;
@@ -41,6 +42,16 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
   const { games, categories, expansions, fetchTaxonomy } = useTaxonomyStore();
   const [availableTags, setAvailableTags] = useState<{id: string, name: string}[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [isLangOpen, setIsLangOpen] = useState(false);
+
+  const LANG_OPTIONS = [
+    { id: 'Español', code: 'ES', url: 'https://flagcdn.com/w20/es.png' },
+    { id: 'Inglés', code: 'GB', url: 'https://flagcdn.com/w20/gb.png' },
+    { id: 'Japonés', code: 'JP', url: 'https://flagcdn.com/w20/jp.png' },
+    { id: 'Coreano', code: 'KR', url: 'https://flagcdn.com/w20/kr.png' },
+    { id: 'Chino', code: 'CN', url: 'https://flagcdn.com/w20/cn.png' },
+    { id: 'Multilenguaje', code: 'MULTI', emoji: '🌍' }
+  ];
 
   useEffect(() => {
     if (isOpen) {
@@ -289,18 +300,61 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Idioma</label>
-                      <select 
-                        value={formData.language}
-                        onChange={(e) => setFormData({...formData, language: e.target.value})}
-                        className="w-full bg-input border border-border rounded-2xl px-4 py-4 text-sm text-foreground focus:outline-none focus:border-red-500/50 transition-all appearance-none"
-                      >
-                        <option value="Español">🇪🇸 Español (ES) ({languageCounts['Español'] || 0})</option>
-                        <option value="Inglés">🇬🇧 Inglés (GB) ({languageCounts['Inglés'] || 0})</option>
-                        <option value="Japonés">🇯🇵 Japonés (JP) ({languageCounts['Japonés'] || 0})</option>
-                        <option value="Coreano">🇰🇷 Coreano (KR) ({languageCounts['Coreano'] || 0})</option>
-                        <option value="Chino">🇨🇳 Chino (CN) ({languageCounts['Chino'] || 0})</option>
-                        <option value="Multilenguaje">🌍 Multilenguaje ({languageCounts['Multilenguaje'] || 0})</option>
-                      </select>
+                      <ClickAwayListener onClickAway={() => setIsLangOpen(false)}>
+                        <div className="relative">
+                          <div 
+                            onClick={() => setIsLangOpen(!isLangOpen)}
+                            className="w-full bg-input border border-border rounded-2xl px-4 py-4 text-sm text-foreground focus:outline-none focus:border-red-500/50 transition-all cursor-pointer flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-2">
+                              {(() => {
+                                const opt = LANG_OPTIONS.find(o => o.id === formData.language) || LANG_OPTIONS[0];
+                                return (
+                                  <>
+                                    {opt.url ? <img src={opt.url} alt={opt.code} className="w-4 h-3 object-cover rounded-sm" /> : <span>{opt.emoji}</span>}
+                                    <span>{opt.id} ({opt.code})</span>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                          
+                          <AnimatePresence>
+                            {isLangOpen && (
+                              <motion.div 
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="absolute top-full left-0 w-full mt-2 bg-input border border-border rounded-xl shadow-2xl overflow-hidden z-50 max-h-64 overflow-y-auto custom-scrollbar"
+                              >
+                                {LANG_OPTIONS.map((opt) => {
+                                  const count = languageCounts[opt.id] || 0;
+                                  return (
+                                    <div 
+                                      key={opt.id}
+                                      onClick={() => {
+                                        setFormData({...formData, language: opt.id});
+                                        setIsLangOpen(false);
+                                      }}
+                                      className={cn(
+                                        "px-4 py-3 text-sm flex items-center justify-between cursor-pointer transition-colors",
+                                        formData.language === opt.id ? "bg-red-600/10 text-red-500 font-bold" : "text-foreground hover:bg-muted"
+                                      )}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        {opt.url ? <img src={opt.url} alt={opt.code} className="w-4 h-3 object-cover rounded-sm shadow-sm" /> : <span>{opt.emoji}</span>}
+                                        <span>{opt.id} ({opt.code})</span>
+                                      </div>
+                                      <span className="text-xs text-muted-foreground font-mono">({count})</span>
+                                    </div>
+                                  );
+                                })}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </ClickAwayListener>
                     </div>
                   </div>
 

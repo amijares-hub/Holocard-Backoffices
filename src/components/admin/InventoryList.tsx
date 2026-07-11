@@ -65,6 +65,16 @@ export const InventoryList = () => {
     fetchProducts();
   }, []);
 
+  const languageCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    products.forEach(p => {
+      if (p.language) {
+        counts[p.language] = (counts[p.language] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [products]);
+
   // Filtrado en tiempo real por búsqueda
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -183,6 +193,7 @@ export const InventoryList = () => {
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchProducts}
         product={selectedProduct}
+        languageCounts={languageCounts}
       />
 
       {/* DATA GRID (TABLA) */}

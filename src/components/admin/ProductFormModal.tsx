@@ -15,9 +15,10 @@ interface ProductFormModalProps {
   onClose: () => void;
   onSuccess: () => void;
   product?: any; // If provided, it's edit mode
+  languageCounts?: Record<string, number>;
 }
 
-export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: ProductFormModalProps) => {
+export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, languageCounts = {} }: ProductFormModalProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -293,12 +294,12 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                         onChange={(e) => setFormData({...formData, language: e.target.value})}
                         className="w-full bg-input border border-border rounded-2xl px-4 py-4 text-sm text-foreground focus:outline-none focus:border-red-500/50 transition-all appearance-none"
                       >
-                        <option value="Español">Español (ES)</option>
-                        <option value="Inglés">Inglés (GB)</option>
-                        <option value="Japonés">Japonés (JP)</option>
-                        <option value="Coreano">Coreano (KR)</option>
-                        <option value="Chino">Chino (CN)</option>
-                        <option value="Multilenguaje">Multilenguaje</option>
+                        <option value="Español">🇪🇸 Español (ES) ({languageCounts['Español'] || 0})</option>
+                        <option value="Inglés">🇬🇧 Inglés (GB) ({languageCounts['Inglés'] || 0})</option>
+                        <option value="Japonés">🇯🇵 Japonés (JP) ({languageCounts['Japonés'] || 0})</option>
+                        <option value="Coreano">🇰🇷 Coreano (KR) ({languageCounts['Coreano'] || 0})</option>
+                        <option value="Chino">🇨🇳 Chino (CN) ({languageCounts['Chino'] || 0})</option>
+                        <option value="Multilenguaje">🌍 Multilenguaje ({languageCounts['Multilenguaje'] || 0})</option>
                       </select>
                     </div>
                   </div>

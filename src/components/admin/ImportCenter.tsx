@@ -74,7 +74,13 @@ export const ImportCenter: React.FC<ImportCenterProps> = ({ onSuccess }) => {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        setPreviewData(results.data);
+        // Mapeo flexible para asegurar que no colapse por columnas mal nombradas
+        const sanitizedData = results.data.map((row: any) => ({
+          ...row,
+          base_price: Number(row.base_price || row.price || row.Precio || row.precio_base) || 0,
+          base_stock: Number(row.base_stock || row.stock || row.Stock || row.cantidad) || 0
+        }));
+        setPreviewData(sanitizedData);
         setIsParsing(false);
       },
       error: (err) => {
@@ -91,20 +97,39 @@ export const ImportCenter: React.FC<ImportCenterProps> = ({ onSuccess }) => {
     setPreviewData([]);
 
     try {
-      const response = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(apiConfig.query)}`);
-      const data = await response.json();
+      const terms = apiConfig.query.split(/[\n,]+/).map(t => t.trim()).filter(Boolean);
+      const queries = [];
 
-      if (data.status === 404) {
-        throw new Error('No se encontraron cartas con ese término.');
+      if (terms.length > 1) {
+        const chunkSize = 30;
+        for (let i = 0; i < terms.length; i += chunkSize) {
+          const chunk = terms.slice(i, i + chunkSize);
+          queries.push(chunk.map(t => `!"${t}"`).join(' OR '));
+        }
+      } else {
+        queries.push(terms[0]);
       }
 
-      if (!data.data) throw new Error(data.details || 'Error al conectar con Scryfall');
+      const fetchPromises = queries.map(q => 
+        fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}`)
+          .then(res => res.json())
+      );
 
-      const mapped = data.data.map((card: any) => ({
+      const results = await Promise.all(fetchPromises);
+      let allCards: any[] = [];
+      results.forEach(data => {
+        if (data.data) allCards = allCards.concat(data.data);
+      });
+
+      if (allCards.length === 0) {
+        throw new Error('No se encontraron cartas con esos términos.');
+      }
+
+      const mapped = allCards.map((card: any) => ({
         name: card.name,
         sku: `MTG-${card.id.substr(0, 8).toUpperCase()}`,
         base_price: parseFloat(card.prices?.eur || card.prices?.usd || '0.00'),
-        base_stock: 1, // Default for individual cards
+        base_stock: 1,
         description: `${card.oracle_text || ''}\n\n${card.flavor_text || ''}`,
         image_url: card.image_uris?.large || card.image_uris?.normal,
         set_name: card.set_name,
@@ -126,9 +151,21 @@ export const ImportCenter: React.FC<ImportCenterProps> = ({ onSuccess }) => {
     setPreviewData([]);
 
     try {
-      let queryStr = apiConfig.query;
-      if (!queryStr.includes(':')) {
-        queryStr = `name:"*${queryStr}*"`;
+      const terms = apiConfig.query.split(/[\n,]+/).map(t => t.trim()).filter(Boolean);
+      const queries = [];
+
+      if (terms.length > 1) {
+        const chunkSize = 30;
+        for (let i = 0; i < terms.length; i += chunkSize) {
+          const chunk = terms.slice(i, i + chunkSize);
+          queries.push(chunk.map(t => `name:"${t}"`).join(' OR '));
+        }
+      } else {
+        let queryStr = terms[0];
+        if (!queryStr.includes(':')) {
+          queryStr = `name:"*${queryStr}*"`;
+        }
+        queries.push(queryStr);
       }
       
       const headers: any = {};
@@ -136,14 +173,22 @@ export const ImportCenter: React.FC<ImportCenterProps> = ({ onSuccess }) => {
         headers['X-Api-Key'] = apiConfig.apiKey;
       }
 
-      const response = await fetch(`https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(queryStr)}`, { headers });
-      const data = await response.json();
+      const fetchPromises = queries.map(q => 
+        fetch(`https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}`, { headers })
+          .then(res => res.json())
+      );
 
-      if (!data.data || data.data.length === 0) {
-        throw new Error('No se encontraron cartas con ese término.');
+      const results = await Promise.all(fetchPromises);
+      let allCards: any[] = [];
+      results.forEach(data => {
+        if (data.data) allCards = allCards.concat(data.data);
+      });
+
+      if (allCards.length === 0) {
+        throw new Error('No se encontraron cartas con esos términos.');
       }
 
-      const mapped = data.data.map((card: any) => ({
+      const mapped = allCards.map((card: any) => ({
         name: card.name,
         sku: `PKM-${card.id.toUpperCase()}`,
         base_price: parseFloat(
@@ -153,7 +198,7 @@ export const ImportCenter: React.FC<ImportCenterProps> = ({ onSuccess }) => {
           card.tcgplayer?.prices?.normal?.market || 
           '0.00'
         ),
-        base_stock: 1, // Default for individual cards
+        base_stock: 1,
         description: `${card.flavorText || ''}\n\nSupertype: ${card.supertype || ''}\nSubtypes: ${card.subtypes?.join(', ') || ''}\nRules: ${card.rules?.join('\n') || ''}`,
         image_url: card.images?.large || card.images?.small,
         set_name: card.set?.name,
@@ -379,15 +424,15 @@ export const ImportCenter: React.FC<ImportCenterProps> = ({ onSuccess }) => {
             {apiConfig.source === 'scryfall' ? (
               <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="space-y-2">
-                  <label className="text-[8px] font-black text-zinc-600 uppercase ml-1">Set o Búsqueda de Cartas</label>
+                  <label className="text-[8px] font-black text-zinc-600 uppercase ml-1">Búsqueda Masiva de Cartas</label>
+                  <p className="text-[9px] text-zinc-500 mb-2 ml-1">Pega una lista de cartas separadas por comas o saltos de línea.</p>
                   <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
-                    <input 
-                      type="text" 
-                      placeholder="ej. set:neo o 'Black Lotus'"
+                    <textarea 
+                      placeholder="ej. Black Lotus, Mox Pearl, set:neo..."
                       value={apiConfig.query}
                       onChange={e => setApiConfig({...apiConfig, query: e.target.value})}
-                      className="w-full bg-zinc-900 border border-white/5 rounded-xl pl-11 pr-4 py-3 text-[10px] font-bold text-white"
+                      rows={4}
+                      className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-[10px] font-bold text-white resize-y"
                     />
                   </div>
                 </div>
@@ -403,15 +448,15 @@ export const ImportCenter: React.FC<ImportCenterProps> = ({ onSuccess }) => {
             ) : apiConfig.source === 'pokemon' ? (
               <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="space-y-2">
-                  <label className="text-[8px] font-black text-zinc-600 uppercase ml-1">Búsqueda de Cartas (Pokémon)</label>
+                  <label className="text-[8px] font-black text-zinc-600 uppercase ml-1">Búsqueda Masiva de Cartas (Pokémon)</label>
+                  <p className="text-[9px] text-zinc-500 mb-2 ml-1">Pega una lista de cartas separadas por comas o saltos de línea.</p>
                   <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
-                    <input 
-                      type="text" 
-                      placeholder="ej. Pikachu o set.id:base1"
+                    <textarea 
+                      placeholder="ej. Pikachu, Charizard, set.id:base1..."
                       value={apiConfig.query}
                       onChange={e => setApiConfig({...apiConfig, query: e.target.value})}
-                      className="w-full bg-zinc-900 border border-white/5 rounded-xl pl-11 pr-4 py-3 text-[10px] font-bold text-white"
+                      rows={4}
+                      className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-[10px] font-bold text-white resize-y"
                     />
                   </div>
                 </div>
@@ -503,7 +548,7 @@ export const ImportCenter: React.FC<ImportCenterProps> = ({ onSuccess }) => {
                     </td>
                     <td className="px-6 py-4 text-[10px] text-white font-black uppercase italic border-b border-white/5">{row.name}</td>
                     <td className="px-6 py-4 text-[9px] text-zinc-500 font-mono border-b border-white/5">{row.sku}</td>
-                    <td className="px-6 py-4 text-[10px] text-emerald-500 font-black border-b border-white/5">€{row.base_price.toFixed(2)}</td>
+                    <td className="px-6 py-4 text-[10px] text-emerald-500 font-black border-b border-white/5">€{(Number(row.base_price) || 0).toFixed(2)}</td>
                     <td className="px-6 py-4 text-[10px] text-zinc-300 font-medium border-b border-white/5">{row.base_stock}</td>
                   </tr>
                 ))}

@@ -24,6 +24,7 @@ import SystemSettings from './pages/admin/SystemSettings';
 import ChatbotSettings from './pages/admin/ChatbotSettings';
 import HomeMainframe from './pages/admin/HomeMainframe';
 import Collections from './pages/admin/Collections';
+import TaxonomyEngine from './pages/admin/TaxonomyEngine';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { ProtectedRoute } from './components/admin/ProtectedRoute';
 import AdminLayout from './components/layout/AdminLayout';
@@ -91,6 +92,7 @@ function AppInner({ session }: { session: any }) {
           <Route index element={<Dashboard />} />
           <Route path="home" element={<HomeMainframe />} />
           <Route path="inventory" element={<Inventory />} />
+          <Route path="taxonomy" element={<TaxonomyEngine />} />
           <Route path="collections" element={<Collections />} />
           <Route path="orders" element={<Orders />} />
           <Route path="pos" element={<POS />} />

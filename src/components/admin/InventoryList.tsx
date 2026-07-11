@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../../lib/supabase';
-import { 
+import {
   Search, Plus, MoreHorizontal, Image as ImageIcon,
-  Tag, AlertCircle, CheckCircle2, Package, Filter, Trash2, 
+  Tag, AlertCircle, CheckCircle2, Package, Filter, Trash2,
   CheckSquare, Square
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -21,6 +21,11 @@ interface Product {
   status: 'active' | 'draft' | 'archived';
   main_image?: string | null;
   image_url?: string | null;
+  category_id?: string; // Fuga sellada
+  game_id?: string;     // Fuga sellada
+  expansion_id?: string;// Fuga sellada
+  language?: string;    // Fuga sellada
+  top_hits_images?: string[]; // Fuga sellada
   categories?: { name: string };
 }
 
@@ -28,7 +33,7 @@ export const InventoryList = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -42,6 +47,7 @@ export const InventoryList = () => {
         .from('products')
         .select(`
           id, name, sku, status, image_url, base_price, base_stock,
+          category_id, game_id, expansion_id, language, top_hits_images,
           categories ( name )
         `)
         .order('created_at', { ascending: false });
@@ -60,8 +66,8 @@ export const InventoryList = () => {
   }, []);
 
   // Filtrado en tiempo real por búsqueda
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
@@ -74,14 +80,14 @@ export const InventoryList = () => {
   };
 
   const toggleSelect = (id: string) => {
-    setSelectedIds(prev => 
+    setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
 
   const handleDelete = async (ids: string[]) => {
     if (!window.confirm(`¿Estás seguro de que deseas eliminar ${ids.length === 1 ? 'este producto' : `estos ${ids.length} productos`}? Esta acción no se puede deshacer.`)) return;
-    
+
     try {
       const { error } = await supabase
         .from('products')
@@ -89,7 +95,7 @@ export const InventoryList = () => {
         .in('id', ids);
 
       if (error) throw error;
-      
+
       setSelectedIds(prev => prev.filter(id => !ids.includes(id)));
       fetchProducts();
     } catch (error) {
@@ -106,27 +112,27 @@ export const InventoryList = () => {
           <h2 className="text-2xl font-black text-foreground tracking-tight">Inventario Maestro</h2>
           <p className="text-sm text-muted-foreground mt-1">Gestiona productos, variantes y stock general.</p>
         </div>
-        
+
         <div className="flex items-center gap-3 w-full md:w-auto">
           <div className="relative w-full md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input 
-              type="text" 
+            <input
+              type="text"
               title="Buscar productos por nombre o SKU"
               aria-label="Buscar productos"
-              placeholder="Buscar por nombre o SKU..." 
+              placeholder="Buscar por nombre o SKU..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-input border border-border rounded-xl pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 transition-colors"
             />
           </div>
-          <button 
+          <button
             title="Filtrar inventario"
             className="bg-card border border-border p-2 rounded-xl text-muted-foreground hover:text-foreground hover:border-border/50 transition-all"
           >
             <Filter className="w-4 h-4" />
           </button>
-          <button 
+          <button
             onClick={() => {
               setSelectedProduct(null);
               setIsModalOpen(true);
@@ -141,7 +147,7 @@ export const InventoryList = () => {
 
       <AnimatePresence>
         {selectedIds.length > 0 && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, height: 0, marginTop: 0 }}
             animate={{ opacity: 1, height: 'auto', marginTop: 24 }}
             exit={{ opacity: 0, height: 0, marginTop: 0 }}
@@ -153,13 +159,13 @@ export const InventoryList = () => {
                 <span className="text-sm font-bold text-red-100">{selectedIds.length} productos seleccionados</span>
               </div>
               <div className="flex items-center gap-2">
-                <button 
+                <button
                   onClick={() => setSelectedIds([])}
                   className="px-4 py-2 text-xs font-bold text-zinc-400 hover:text-white transition-colors"
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   onClick={() => handleDelete(selectedIds)}
                   className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors shadow-lg shadow-red-900/40"
                 >
@@ -172,7 +178,7 @@ export const InventoryList = () => {
         )}
       </AnimatePresence>
 
-      <ProductFormModal 
+      <ProductFormModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchProducts}
@@ -186,7 +192,7 @@ export const InventoryList = () => {
             <thead>
               <tr className="border-b border-border bg-muted/50 transition-colors">
                 <th className="p-4 w-12 text-center">
-                  <button 
+                  <button
                     onClick={toggleSelectAll}
                     title={selectedIds.length === filteredProducts.length ? "Deseleccionar todos" : "Seleccionar todos"}
                     className="text-muted-foreground hover:text-foreground transition-colors"
@@ -229,7 +235,7 @@ export const InventoryList = () => {
                     selectedIds.includes(product.id) && "bg-red-600/[0.03] border-l-2 border-l-red-600"
                   )}>
                     <td className="p-4 text-center">
-                      <button 
+                      <button
                         onClick={() => toggleSelect(product.id)}
                         title={selectedIds.includes(product.id) ? "Deseleccionar" : "Seleccionar"}
                         className={cn(
@@ -269,20 +275,20 @@ export const InventoryList = () => {
                     <td className="p-4 text-right">
                       <span className={cn(
                         "text-sm font-mono font-bold",
-                        (product.base_stock || product.stock || 0) === 0 ? "text-red-500" : 
-                        (product.base_stock || product.stock || 0) < 10 ? "text-amber-500" : "text-emerald-500"
+                        (product.base_stock || product.stock || 0) === 0 ? "text-red-500" :
+                          (product.base_stock || product.stock || 0) < 10 ? "text-amber-500" : "text-emerald-500"
                       )}>
                         {product.base_stock || product.stock || 0}
                       </span>
                     </td>
                     <td className="p-4 text-center">
-                      {product.status === 'active' && <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full"><CheckCircle2 className="w-3 h-3"/> Activo</span>}
-                      {product.status === 'draft' && <span className="inline-flex items-center gap-1 text-xs font-medium text-zinc-400 bg-zinc-400/10 px-2 py-1 rounded-full"><AlertCircle className="w-3 h-3"/> Borrador</span>}
-                      {product.status === 'archived' && <span className="inline-flex items-center gap-1 text-xs font-medium text-red-400 bg-red-400/10 px-2 py-1 rounded-full"><AlertCircle className="w-3 h-3"/> Archivado</span>}
+                      {product.status === 'active' && <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full"><CheckCircle2 className="w-3 h-3" /> Activo</span>}
+                      {product.status === 'draft' && <span className="inline-flex items-center gap-1 text-xs font-medium text-zinc-400 bg-zinc-400/10 px-2 py-1 rounded-full"><AlertCircle className="w-3 h-3" /> Borrador</span>}
+                      {product.status === 'archived' && <span className="inline-flex items-center gap-1 text-xs font-medium text-red-400 bg-red-400/10 px-2 py-1 rounded-full"><AlertCircle className="w-3 h-3" /> Archivado</span>}
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button 
+                        <button
                           onClick={() => {
                             setSelectedProduct(product);
                             setIsModalOpen(true);
@@ -292,7 +298,7 @@ export const InventoryList = () => {
                         >
                           <MoreHorizontal className="w-5 h-5" />
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleDelete([product.id])}
                           className="text-zinc-500 hover:text-red-500 p-2 rounded-xl hover:bg-red-500/10 transition-all"
                           title="Eliminar"

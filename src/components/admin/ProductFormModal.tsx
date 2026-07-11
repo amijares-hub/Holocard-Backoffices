@@ -33,14 +33,13 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
     category_id: '',
     expansion_id: '',
     tags: [] as string[],
-    top_hits_images: [] as string[]
+    top_hits_images: [] as string[],
+    language: 'Español'
   });
 
   const { games, categories, expansions, fetchTaxonomy } = useTaxonomyStore();
   const [availableTags, setAvailableTags] = useState<{id: string, name: string}[]>([]);
   const [tagInput, setTagInput] = useState('');
-
-  console.log('Taxonomy in modal:', { games, categories, expansions });
 
   useEffect(() => {
     if (isOpen) {
@@ -50,15 +49,16 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
         setFormData({
           name: product.name || '',
           sku: product.sku || '',
-          base_price: product.base_price || 0,
-          base_stock: product.base_stock || 0,
+          base_price: product.base_price || product.price || 0,
+          base_stock: product.base_stock || product.stock || 0,
           status: product.status || 'draft',
-          image_url: product.image_url || '',
+          image_url: product.image_url || product.main_image || '',
           game_id: product.game_id || '',
           category_id: product.category_id || '',
           expansion_id: product.expansion_id || '',
-          tags: [], // Will be loaded below
-          top_hits_images: product.top_hits_images || []
+          tags: [], 
+          top_hits_images: product.top_hits_images || [],
+          language: product.language || 'Español'
         });
         fetchProductTags(product.id);
       } else {
@@ -73,7 +73,8 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
           category_id: '',
           expansion_id: '',
           tags: [],
-          top_hits_images: []
+          top_hits_images: [],
+          language: 'Español'
         });
       }
     }
@@ -118,7 +119,7 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
     setError(null);
 
     try {
-      const payload = {
+      const payload: any = {
         name: formData.name,
         sku: formData.sku,
         base_price: formData.base_price,
@@ -126,11 +127,17 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
         status: formData.status,
         image_url: formData.image_url,
         game_id: formData.game_id || null,
-        category_id: formData.category_id || null,
         expansion_id: formData.expansion_id || null,
         top_hits_images: formData.top_hits_images,
-        slug: formData.name.toLowerCase().replace(/ /g, '-')
+        slug: formData.name.toLowerCase().replace(/ /g, '-'),
+        language: formData.language
       };
+
+      if (formData.category_id) {
+        payload.category_id = formData.category_id;
+      } else if (!product?.id) {
+        payload.category_id = null;
+      }
 
       let result;
       if (product?.id) {
@@ -150,11 +157,8 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
       const finalProductId = product?.id || result.data?.[0]?.id;
 
       if (finalProductId) {
-        // Sync Tags
-        // 1. Remove old relations
         await supabase.from('product_tags').delete().eq('product_id', finalProductId);
         
-        // 2. Ensure tags exist and get IDs
         for (const tagName of formData.tags) {
           let { data: tagData } = await supabase.from('tags').select('id').eq('name', tagName).single();
           
@@ -202,33 +206,33 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed top-0 right-0 h-full w-full max-w-xl bg-zinc-950 border-l border-white/10 z-[101] shadow-2xl flex flex-col"
+            className="fixed top-0 right-0 h-full w-full max-w-xl bg-background border-l border-border z-[101] shadow-2xl flex flex-col"
           >
             {/* Header */}
-            <div className="p-6 border-b border-white/5 flex items-center justify-between bg-black/40">
+            <div className="p-6 border-b border-border flex items-center justify-between bg-muted/30">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-red-600/10 border border-red-500/20 flex items-center justify-center">
                   <Package className="w-5 h-5 text-red-500" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-white uppercase tracking-tight">
+                  <h3 className="text-lg font-black text-foreground uppercase tracking-tight">
                     {product ? 'Editar Producto' : 'Nuevo Producto'}
                   </h3>
-                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Gestión de Inventario Enterprise</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Gestión de Inventario Enterprise</p>
                 </div>
               </div>
               <button 
                 onClick={onClose}
-                className="p-2 hover:bg-white/5 rounded-xl transition-colors text-zinc-500 hover:text-white"
+                className="p-2 hover:bg-muted rounded-xl transition-colors text-muted-foreground hover:text-foreground"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Form Content */}
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar text-foreground">
               {error && (
-                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-400 text-sm">
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-500 text-sm">
                   <AlertCircle className="w-5 h-5 shrink-0" />
                   <p>{error}</p>
                 </div>
@@ -242,57 +246,72 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                 
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Nombre del Producto</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Nombre del Producto</label>
                     <div className="relative">
-                      <Tag className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                      <Tag className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <input 
                         required
                         type="text" 
                         value={formData.name}
                         onChange={(e) => setFormData({...formData, name: e.target.value})}
                         placeholder="Ej: Charizard VMAX Gold"
-                        className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:border-red-500/50 transition-all"
+                        className="w-full bg-input border border-border rounded-2xl pl-12 pr-4 py-4 text-sm text-foreground focus:outline-none focus:border-red-500/50 transition-all"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">SKU / Referencia</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">SKU / Referencia</label>
                       <div className="relative">
-                        <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                        <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input 
                           type="text" 
                           value={formData.sku}
                           onChange={(e) => setFormData({...formData, sku: e.target.value})}
                           placeholder="SKU-001"
-                          className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white font-mono focus:outline-none focus:border-red-500/50 transition-all"
+                          className="w-full bg-input border border-border rounded-2xl pl-12 pr-4 py-4 text-sm text-foreground font-mono focus:outline-none focus:border-red-500/50 transition-all"
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Estado</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Estado</label>
                       <select 
                         value={formData.status}
                         onChange={(e) => setFormData({...formData, status: e.target.value as any})}
-                        className="w-full bg-zinc-900 border border-white/5 rounded-2xl px-4 py-4 text-sm text-white focus:outline-none focus:border-red-500/50 transition-all appearance-none"
+                        className="w-full bg-input border border-border rounded-2xl px-4 py-4 text-sm text-foreground focus:outline-none focus:border-red-500/50 transition-all appearance-none"
                       >
                         <option value="draft">Borrador</option>
                         <option value="active">Activo</option>
                         <option value="archived">Archivado</option>
                       </select>
                     </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Idioma</label>
+                      <select 
+                        value={formData.language}
+                        onChange={(e) => setFormData({...formData, language: e.target.value})}
+                        className="w-full bg-input border border-border rounded-2xl px-4 py-4 text-sm text-foreground focus:outline-none focus:border-red-500/50 transition-all appearance-none"
+                      >
+                        <option value="Español">Español (ES)</option>
+                        <option value="Inglés">Inglés (GB)</option>
+                        <option value="Japonés">Japonés (JP)</option>
+                        <option value="Coreano">Coreano (KR)</option>
+                        <option value="Chino">Chino (CN)</option>
+                        <option value="Multilenguaje">Multilenguaje</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Franquicia (Juego)</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Franquicia (Juego)</label>
                       <div className="relative">
-                        <Layers className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                        <Layers className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <select 
                           value={formData.game_id}
                           onChange={(e) => setFormData({...formData, game_id: e.target.value, category_id: '', expansion_id: ''})}
-                          className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:border-red-500/50 transition-all appearance-none"
+                          className="w-full bg-input border border-border rounded-2xl pl-12 pr-4 py-4 text-sm text-foreground focus:outline-none focus:border-red-500/50 transition-all appearance-none"
                         >
                           <option value="">Selecciona Franquicia</option>
                           {games.map(game => (
@@ -303,14 +322,14 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Categoría</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Categoría</label>
                       <div className="relative">
-                        <Layers className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                        <Layers className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <select 
                           value={formData.category_id}
                           onChange={(e) => setFormData({...formData, category_id: e.target.value})}
                           disabled={!formData.game_id}
-                          className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:border-red-500/50 transition-all appearance-none disabled:opacity-50"
+                          className="w-full bg-input border border-border rounded-2xl pl-12 pr-4 py-4 text-sm text-foreground focus:outline-none focus:border-red-500/50 transition-all appearance-none disabled:opacity-50"
                         >
                           <option value="">Selecciona Categoría</option>
                           {categories.filter(c => c.game_id === formData.game_id).map(cat => (
@@ -321,14 +340,14 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Expansión / Set</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Expansión / Set</label>
                       <div className="relative">
-                        <Layers className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                        <Layers className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <select 
                           value={formData.expansion_id}
                           onChange={(e) => setFormData({...formData, expansion_id: e.target.value})}
                           disabled={!formData.game_id}
-                          className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:border-red-500/50 transition-all appearance-none disabled:opacity-50"
+                          className="w-full bg-input border border-border rounded-2xl pl-12 pr-4 py-4 text-sm text-foreground focus:outline-none focus:border-red-500/50 transition-all appearance-none disabled:opacity-50"
                         >
                           <option value="">Selecciona Expansión</option>
                           {expansions.filter(e => e.game_id === formData.game_id).map(exp => (
@@ -349,27 +368,27 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Precio Base (€)</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Precio Base (€)</label>
                     <div className="relative">
-                      <Euro className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                      <Euro className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <input 
                         type="number" 
                         step="0.01"
                         value={formData.base_price}
                         onChange={(e) => setFormData({...formData, base_price: parseFloat(e.target.value) || 0})}
-                        className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white font-mono focus:outline-none focus:border-red-500/50 transition-all"
+                        className="w-full bg-input border border-border rounded-2xl pl-12 pr-4 py-4 text-sm text-foreground font-mono focus:outline-none focus:border-red-500/50 transition-all"
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Stock Inicial</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Stock Inicial</label>
                     <div className="relative">
-                      <Database className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                      <Database className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <input 
                         type="number" 
                         value={formData.base_stock}
                         onChange={(e) => setFormData({...formData, base_stock: parseInt(e.target.value) || 0})}
-                        className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white font-mono focus:outline-none focus:border-red-500/50 transition-all"
+                        className="w-full bg-input border border-border rounded-2xl pl-12 pr-4 py-4 text-sm text-foreground font-mono focus:outline-none focus:border-red-500/50 transition-all"
                       />
                     </div>
                   </div>
@@ -382,14 +401,14 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                   <Activity className="w-3 h-3" /> Media Assets
                 </div>
                 
-                <div className="bg-black/20 border border-white/5 p-6 rounded-[2rem] space-y-8">
+                <div className="bg-card border border-border p-6 rounded-[2rem] space-y-8">
                   <ImageUploader 
                     label="Imagen Principal (Thumbnail)"
                     currentUrl={formData.image_url}
                     onUploadSuccess={(url) => setFormData({...formData, image_url: url})}
                   />
                   
-                  <div className="h-[1px] bg-white/5 w-full" />
+                  <div className="h-[1px] bg-border w-full" />
                   
                   <BulkImageUploader 
                     label="Top Hits — Galería de Cartas"
@@ -398,7 +417,7 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                     onUploadSuccess={(urls) => setFormData({...formData, top_hits_images: urls})}
                   />
                   
-                  <p className="text-[10px] text-zinc-500 mt-4 text-center italic">Sincronizado con Supabase Storage Platform (product_assets)</p>
+                  <p className="text-[10px] text-muted-foreground mt-4 text-center italic">Sincronizado con Supabase Storage Platform (product_assets)</p>
                 </div>
               </div>
 
@@ -410,21 +429,21 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                 
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Etiquetas del Producto</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Etiquetas del Producto</label>
                     <div className="relative">
-                      <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                      <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <input 
                         type="text" 
                         value={tagInput}
                         onChange={(e) => setTagInput(e.target.value)}
                         onKeyDown={handleAddTag}
                         placeholder="Escribe y pulsa Enter para añadir..."
-                        className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:border-red-500/50 transition-all"
+                        className="w-full bg-input border border-border rounded-2xl pl-12 pr-4 py-4 text-sm text-foreground focus:outline-none focus:border-red-500/50 transition-all"
                       />
                       <button 
                         type="button"
                         onClick={() => handleAddTag()}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-red-500 uppercase hover:text-white transition-colors"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-red-500 uppercase hover:text-red-400 transition-colors"
                       >
                         Añadir
                       </button>
@@ -448,13 +467,13 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                       </span>
                     ))}
                     {formData.tags.length === 0 && (
-                      <p className="text-[10px] text-zinc-600 italic ml-1">Sin etiquetas asignadas</p>
+                      <p className="text-[10px] text-muted-foreground italic ml-1">Sin etiquetas asignadas</p>
                     )}
                   </div>
 
                   {availableTags.length > 0 && (
                     <div className="pt-2">
-                      <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-3 ml-1">Sugerencias:</p>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 ml-1">Sugerencias:</p>
                       <div className="flex flex-wrap gap-2">
                         {availableTags
                           .filter(t => !formData.tags.includes(t.name))
@@ -464,7 +483,7 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                               key={tag.id}
                               type="button"
                               onClick={() => setFormData({ ...formData, tags: [...formData.tags, tag.name] })}
-                              className="px-2 py-1 bg-white/5 border border-white/5 rounded-lg text-[9px] text-zinc-400 hover:border-white/10 hover:text-white transition-all"
+                              className="px-2 py-1 bg-muted/50 border border-border rounded-lg text-[9px] text-muted-foreground hover:border-foreground hover:text-foreground transition-all"
                             >
                               + {tag.name}
                             </button>
@@ -478,11 +497,11 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
             </form>
 
             {/* Footer */}
-            <div className="p-8 border-t border-white/5 bg-black/40 flex gap-4">
+            <div className="p-8 border-t border-border bg-muted/30 flex gap-4">
               <button 
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-6 py-4 bg-zinc-900 border border-white/5 rounded-2xl text-xs font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all"
+                className="flex-1 px-6 py-4 bg-input border border-border rounded-2xl text-xs font-black uppercase tracking-widest text-muted-foreground hover:text-foreground transition-all"
               >
                 Cancelar
               </button>

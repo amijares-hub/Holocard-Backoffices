@@ -53,7 +53,7 @@ export function CommerceHero() {
           <header className="flex items-center">
             <div className="w-full md:w-2/3 lg:w-1/2 bg-[#09090b]/95 backdrop-blur-sm p-4 rounded-br-2xl flex items-center gap-2 border-r border-b border-white/5">
               <a href="#" className="flex items-center">
-                <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/LogoHeroSection.png" alt="HoloCards" className="h-16 w-auto object-contain" />
+                <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/LogoHeroSection.png" alt="HoloCards" className="h-32 w-auto object-contain" />
               </a>
 
               <nav className="hidden lg:flex items-center justify-between w-full ml-8">
@@ -89,7 +89,7 @@ export function CommerceHero() {
                   <SheetHeader className="p-6 text-left border-b border-white/5">
                     <SheetTitle className="flex items-center justify-between">
                       <a href="#" className="flex items-center">
-                        <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/LogoHeroSection.png" alt="HoloCards" className="h-16 w-auto object-contain" />
+                        <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/LogoHeroSection.png" alt="HoloCards" className="h-32 w-auto object-contain" />
                       </a>
                     </SheetTitle>
                   </SheetHeader>

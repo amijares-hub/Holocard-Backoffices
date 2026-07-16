@@ -67,7 +67,7 @@ export default function AdminLayout() {
       <aside className="w-64 border-r border-border bg-sidebar hidden lg:flex flex-col flex-shrink-0 transition-colors">
         <div className="p-6">
           <div className="flex items-center mb-8">
-            <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/logo%20Holocard.jpg" alt="HoloCards" className="h-8 w-auto object-contain" />
+            <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/LogoHeroSection.png" alt="HoloCards" className="h-8 w-auto object-contain" />
           </div>
           
           <nav className="space-y-1">
@@ -286,7 +286,7 @@ export default function AdminLayout() {
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center">
-                      <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/logo%20Holocard.jpg" alt="HoloCards" className="h-8 w-auto object-contain" />
+                      <img src="https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Imagen%20De%20Logo%20de%20Empresa/LogoHeroSection.png" alt="HoloCards" className="h-8 w-auto object-contain" />
                     </div>
                     <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-muted-foreground hover:text-foreground" title="Close Menu">
                       <X className="w-6 h-6" />

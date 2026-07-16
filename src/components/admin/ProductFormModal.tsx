@@ -295,6 +295,7 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
                       >
                         <option value="draft">Borrador</option>
                         <option value="active">Activo</option>
+                        <option value="coming_soon">Próximamente</option>
                         <option value="archived">Archivado</option>
                       </select>
                     </div>

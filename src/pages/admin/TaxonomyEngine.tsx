@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Layers, Plus, Trash2, FolderTree, Gamepad2, Loader2, AlertCircle } from 'lucide-react';
+import { Layers, Plus, Trash2, FolderTree, Gamepad2, Loader2, AlertCircle, LayoutGrid, Tag, ChevronRight } from 'lucide-react';
 
 interface Game { id: string; name: string; }
 interface Category { id: string; name: string; slug: string; game_id: string; games?: { name: string }; }
@@ -21,6 +21,9 @@ export default function TaxonomyEngine() {
   const [isSubmittingCat, setIsSubmittingCat] = useState(false);
   const [isSubmittingExp, setIsSubmittingExp] = useState(false);
 
+  // Estado para la sección exploradora inferior
+  const [selectedGameExplorer, setSelectedGameExplorer] = useState<string>('');
+
   const createSlug = (text: string) => text.toLowerCase().trim().replace(/[\s\W-]+/g, '-');
 
   const fetchData = async () => {
@@ -31,7 +34,12 @@ export default function TaxonomyEngine() {
         supabase.from('categories').select('*, games(name)').order('name'),
         supabase.from('expansions').select('*, games(name)').order('name')
       ]);
-      if (gamesRes.data) setGames(gamesRes.data);
+      if (gamesRes.data) {
+        setGames(gamesRes.data);
+        if (gamesRes.data.length > 0 && !selectedGameExplorer) {
+          setSelectedGameExplorer(gamesRes.data[0].id);
+        }
+      }
       if (catRes.data) setCategories(catRes.data);
       if (expRes.data) setExpansions(expRes.data);
     } catch (error) {
@@ -84,10 +92,14 @@ export default function TaxonomyEngine() {
     else alert('Error al eliminar: ' + error.message);
   };
 
+  // Categorías pertenecientes a la franquicia seleccionada en el explorador
+  const explorerCategories = categories.filter(c => c.game_id === selectedGameExplorer);
+  const selectedGameName = games.find(g => g.id === selectedGameExplorer)?.name || 'Franquicia';
+
   if (loading) return <div className="flex justify-center p-20"><Loader2 className="w-8 h-8 animate-spin text-red-500" /></div>;
 
   return (
-    <div className="space-y-6 w-full max-w-7xl mx-auto p-6">
+    <div className="space-y-10 w-full max-w-7xl mx-auto p-6">
       <div>
         <h2 className="text-2xl font-black text-foreground tracking-tight">Gestor de Taxonomía</h2>
         <p className="text-sm text-muted-foreground mt-1">Crea y administra las categorías y expansiones de tus franquicias.</p>
@@ -178,6 +190,83 @@ export default function TaxonomyEngine() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* ==================================================================== */}
+      {/* COMPONENTE SEPARADO: EXPLORADOR DE CATEGORÍAS POR FRANQUICIA         */}
+      {/* ==================================================================== */}
+      <div className="bg-card border border-border rounded-[2rem] p-6 md:p-8 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+              <LayoutGrid className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-foreground italic uppercase tracking-wider">
+                EXPLORADOR DE CATEGORÍAS POR FRANQUICIA
+              </h3>
+              <p className="text-xs text-muted-foreground font-medium">
+                Selecciona una franquicia para inspeccionar ordenada y exclusivamente sus categorías asociadas.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              TOTAL EN {selectedGameName}:
+            </span>
+            <span className="bg-amber-400/10 border border-amber-400/30 text-amber-400 text-xs font-black px-3 py-1 rounded-full">
+              {explorerCategories.length}
+            </span>
+          </div>
+        </div>
+
+        {/* Pestañas de Selección de Franquicia (Basadas en la tabla `games`) */}
+        <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none">
+          {games.map((g) => {
+            const isSelected = selectedGameExplorer === g.id;
+            return (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => setSelectedGameExplorer(g.id)}
+                className={`px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 shrink-0 border ${
+                  isSelected
+                    ? "bg-amber-400 text-black border-amber-300 shadow-lg shadow-amber-400/20"
+                    : "bg-muted/30 text-muted-foreground border-border hover:border-amber-400/40 hover:text-foreground"
+                }`}
+              >
+                {g.name}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Rejilla de Categorías Filtradas por game_id */}
+        <div className="pt-2">
+          {explorerCategories.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+              {explorerCategories.map((cat) => (
+                <div
+                  key={cat.id}
+                  className="p-4 bg-muted/20 border border-border hover:border-amber-400/50 rounded-xl flex items-center justify-between group transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <Tag className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="text-xs font-bold uppercase tracking-tight text-foreground group-hover:text-amber-400 transition-colors">
+                      {cat.name}
+                    </span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-amber-400 group-hover:translate-x-1 transition-all" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-12 text-center text-muted-foreground font-bold uppercase tracking-widest text-xs border border-dashed border-border rounded-xl">
+              NO HAY CATEGORÍAS REGISTRADAS PARA {selectedGameName}
+            </div>
+          )}
         </div>
       </div>
     </div>

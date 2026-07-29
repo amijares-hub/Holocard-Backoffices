@@ -6,11 +6,13 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
+  // En Vercel usamos rutas absolutas ('/') para que los assets se resuelvan
+  // correctamente al navegar directo a subrutas profundas (/admin/taxonomy).
+  // En Chrome Extension se requieren rutas relativas ('./') porque el protocolo
+  // chrome-extension:// no admite rutas absolutas.
+  const isVercel = !!process.env.VERCEL;
   return {
-    // ── CRÍTICO para Chrome Extension ────────────────────────────────────────
-    // El protocolo chrome-extension:// requiere rutas relativas (./) en lugar
-    // de absolutas (/). Sin esto, los assets no cargan en el popup.
-    base: './',
+    base: isVercel ? '/' : './',
     plugins: [
       react(),
       tailwindcss(),
@@ -54,9 +56,11 @@ export default defineConfig(({ mode }) => {
           globIgnores: ['Imagenes/**', '**/*.{mp4,webm,mp3}'],
           // Límite de tamaño por archivo (5 MB, por seguridad)
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-          // En contexto de extensión no hay navegación de URL clásica;
-          // desactivamos navigateFallback para evitar conflictos con el popup.
-          navigateFallback: null,
+          // En Vercel (SPA web) el SW debe interceptar navegación a subrutas
+          // y devolver el index.html, evitando que el browser reciba HTML en
+          // lugar de JS (error: "Unexpected token '<'").
+          // En Chrome Extension lo mantenemos null para evitar conflictos.
+          navigateFallback: isVercel ? '/index.html' : null,
         },
       }),
     ],

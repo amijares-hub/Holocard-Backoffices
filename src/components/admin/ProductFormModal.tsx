@@ -1,29 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Save, Package, Tag, Hash, Euro, 
-  Database, Activity, Loader2, AlertCircle, Layers, ChevronDown
+  Database, Activity, Loader2, AlertCircle, Layers
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ImageUploader } from './ImageUploader';
 import { BulkImageUploader } from './BulkImageUploader';
-import { cn } from '../../lib/utils';
 import { useTaxonomyStore } from '../../lib/taxonomyStore';
-import ClickAwayListener from 'react-click-away-listener';
 
 interface ProductFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  product?: any; // If provided, it's edit mode
+  product?: any;
   languageCounts?: Record<string, number>;
 }
 
-export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, languageCounts = {} }: ProductFormModalProps) => {
+export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: ProductFormModalProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Form state
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
@@ -42,16 +39,7 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
   const { games, categories, expansions, fetchTaxonomy } = useTaxonomyStore();
   const [availableTags, setAvailableTags] = useState<{id: string, name: string}[]>([]);
   const [tagInput, setTagInput] = useState('');
-  const [isLangOpen, setIsLangOpen] = useState(false);
-
-  const LANG_OPTIONS = [
-    { id: 'Español', code: 'ES', url: 'https://flagcdn.com/w20/es.png' },
-    { id: 'Inglés', code: 'GB', url: 'https://flagcdn.com/w20/gb.png' },
-    { id: 'Japonés', code: 'JP', url: 'https://flagcdn.com/w20/jp.png' },
-    { id: 'Coreano', code: 'KR', url: 'https://flagcdn.com/w20/kr.png' },
-    { id: 'Chino', code: 'CN', url: 'https://flagcdn.com/w20/cn.png' },
-    { id: 'Multilenguaje', code: 'MULTI', emoji: '🌍' }
-  ];
+  const [creatingTag, setCreatingTag] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -94,30 +82,87 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
   }, [isOpen, product]);
 
   const fetchAvailableTags = async () => {
-    const { data, error } = await supabase.from('tags').select('id, name');
-    if (!error && data) setAvailableTags(data);
-  };
-
-  const fetchProductTags = async (productId: string) => {
-    const { data, error } = await supabase
-      .from('product_tags')
-      .select('tags(name)')
-      .eq('product_id', productId);
-    
-    if (!error && data) {
-      const tagNames = data.map((item: any) => item.tags.name);
-      setFormData(prev => ({ ...prev, tags: tagNames }));
+    if (!supabase) return;
+    try {
+      const { data } = await supabase.from('collections').select('id, name');
+      if (data) {
+        setAvailableTags(data.map((c: any) => ({ id: String(c.id), name: String(c.name).toUpperCase() })));
+      }
+    } catch (e) {
+      console.warn("Aviso cargando etiquetas:", e);
     }
   };
 
-  const handleAddTag = (e?: React.KeyboardEvent) => {
+  const fetchProductTags = async (productId: string) => {
+    if (!supabase) return;
+    try {
+      const { data } = await supabase
+        .from('product_collections')
+        .select('collections(name)')
+        .eq('product_id', productId);
+      
+      let tagNames: string[] = [];
+      if (data) {
+        tagNames = data.map((item: any) => item.collections?.name).filter(Boolean);
+      }
+
+      if (tagNames.length === 0 && product?.tags) {
+        if (Array.isArray(product.tags)) tagNames = product.tags;
+        else if (typeof product.tags === 'string') tagNames = product.tags.split(',').map((t: string) => t.trim());
+      }
+
+      setFormData(prev => ({ ...prev, tags: tagNames.map((t: string) => t.toUpperCase()) }));
+    } catch (err) {
+      console.warn("Aviso al cargar tags del producto:", err);
+    }
+  };
+
+  const handleAddTag = async (e?: React.KeyboardEvent) => {
     if (e && e.key !== 'Enter') return;
     if (e) e.preventDefault();
     
-    const tag = tagInput.trim();
-    if (tag && !formData.tags.includes(tag)) {
-      setFormData({ ...formData, tags: [...formData.tags, tag] });
-      setTagInput('');
+    const tag = tagInput.trim().toUpperCase();
+    if (!tag || formData.tags.includes(tag)) return;
+
+    // 1. Añadir al formulario de inmediato
+    setFormData(prev => ({ ...prev, tags: [...prev.tags, tag] }));
+    setTagInput('');
+
+    // 2. Si no existe aún en la BD, crear la colección inline
+    const existsInDB = availableTags.some(t => t.name === tag);
+    if (!existsInDB && supabase) {
+      setCreatingTag(true);
+      try {
+        const { data: newCol } = await supabase
+          .from('collections')
+          .insert([{ name: tag }])
+          .select('id, name')
+          .maybeSingle();
+
+        if (newCol?.id) {
+          setAvailableTags(prev => [
+            { id: String(newCol.id), name: String(newCol.name).toUpperCase() },
+            ...prev
+          ]);
+        }
+      } catch (_) {
+        // Ya existe — obtenemos su ID para actualizar la lista de sugerencias
+        try {
+          const { data: existingCol } = await supabase
+            .from('collections')
+            .select('id, name')
+            .eq('name', tag)
+            .maybeSingle();
+          if (existingCol?.id && !availableTags.some(t => t.id === String(existingCol.id))) {
+            setAvailableTags(prev => [
+              { id: String(existingCol.id), name: String(existingCol.name).toUpperCase() },
+              ...prev
+            ]);
+          }
+        } catch (_) {}
+      } finally {
+        setCreatingTag(false);
+      }
     }
   };
 
@@ -131,24 +176,25 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
     setError(null);
 
     try {
+      if (!supabase) throw new Error("Conexión con Supabase no disponible");
+
+      console.log("Submitting product with tags:", formData.tags);
+
+      // 🔴 PAYLOAD SEGURO Y LIMPIO: Sin el campo inexistente 'collection'
       const payload: any = {
         name: formData.name,
-        sku: formData.sku,
-        base_price: formData.base_price,
-        base_stock: formData.base_stock,
+        sku: formData.sku || null,
+        base_price: formData.base_price || 0,
+        base_stock: formData.base_stock || 0,
         status: formData.status,
-        image_url: formData.image_url,
+        image_url: formData.image_url || null,
         game_id: formData.game_id || null,
         expansion_id: formData.expansion_id || null,
-        top_hits_images: formData.top_hits_images,
-        slug: formData.name.toLowerCase().replace(/ /g, '-'),
-        language: formData.language
+        language: formData.language || null
       };
 
       if (formData.category_id) {
         payload.category_id = formData.category_id;
-      } else if (!product?.id) {
-        payload.category_id = null;
       }
 
       let result;
@@ -165,26 +211,66 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
           .select();
       }
 
-      if (result.error) throw result.error;
+      if (result.error) {
+        console.error("Error directo de Supabase:", result.error);
+        throw new Error(result.error.message || result.error.details || "Error al actualizar producto");
+      }
+
       const finalProductId = product?.id || result.data?.[0]?.id;
 
       if (finalProductId) {
-        await supabase.from('product_tags').delete().eq('product_id', finalProductId);
+        console.log("Saving tags for product:", finalProductId, "Tags:", formData.tags);
+        // Limpiar vinculaciones en product_collections
+        try {
+          await supabase.from('product_collections').delete().eq('product_id', finalProductId);
+        } catch (e) {
+          console.warn("Limpieza relacional:", e);
+        }
         
-        for (const tagName of formData.tags) {
-          let { data: tagData } = await supabase.from('tags').select('id').eq('name', tagName).single();
-          
-          if (!tagData) {
-            const { data: newTag, error: tagError } = await supabase
-              .from('tags')
-              .insert([{ name: tagName, slug: tagName.toLowerCase().replace(/ /g, '-') }])
-              .select()
-              .single();
-            if (!tagError) tagData = newTag;
+        // Sincronizar etiquetas con 'collections' y 'product_collections'
+        for (const rawTag of formData.tags) {
+          const cleanTag = rawTag.trim().toUpperCase();
+          if (!cleanTag) continue;
+
+          let collectionId: string | null = null;
+          const { data: existingCol } = await supabase
+            .from('collections')
+            .select('id')
+            .eq('name', cleanTag)
+            .maybeSingle();
+
+          if (existingCol?.id) {
+            collectionId = String(existingCol.id);
+            console.log("Found existing collection:", cleanTag, "ID:", collectionId);
+          } else {
+            const { data: newCol, error: newColErr } = await supabase
+              .from('collections')
+              .insert([{ name: cleanTag }])
+              .select('id')
+              .maybeSingle();
+
+            if (newCol?.id) {
+              collectionId = String(newCol.id);
+              console.log("Created new collection:", cleanTag, "ID:", collectionId);
+            } else {
+              console.error("Failed to create collection:", cleanTag, newColErr);
+            }
           }
-          
-          if (tagData) {
-            await supabase.from('product_tags').insert([{ product_id: finalProductId, tag_id: tagData.id }]);
+
+          if (collectionId) {
+            try {
+              console.log("Inserting into product_collections -> product_id:", finalProductId, "collection_id:", collectionId);
+              const res = await supabase
+                .from('product_collections')
+                .insert([{ product_id: finalProductId, collection_id: collectionId }]);
+              if (res.error) {
+                console.error("Error inserting into product_collections:", res.error);
+              } else {
+                console.log("Successfully inserted into product_collections!");
+              }
+            } catch (e) {
+              console.error("Exception inserting into product_collections:", e);
+            }
           }
         }
       }
@@ -192,7 +278,7 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
       onSuccess();
       onClose();
     } catch (err: any) {
-      console.error('Error saving product:', err);
+      console.error('Error al guardar el producto:', err);
       setError(err.message || 'Error al guardar el producto');
     } finally {
       setLoading(false);
@@ -203,7 +289,6 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Overlay */}
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -212,7 +297,6 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
           />
 
-          {/* Slide-over Panel */}
           <motion.div 
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -250,7 +334,7 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
                 </div>
               )}
 
-              {/* Main Info Section */}
+              {/* General Info */}
               <div className="space-y-6">
                 <div className="flex items-center gap-2 text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">
                   <Activity className="w-3 h-3" /> Información General
@@ -374,7 +458,7 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
                 </div>
               </div>
 
-              {/* Pricing & Stock Section */}
+              {/* Pricing & Stock */}
               <div className="space-y-6">
                 <div className="flex items-center gap-2 text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">
                   <Database className="w-3 h-3" /> Valores y Stock
@@ -430,20 +514,24 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
                     currentUrls={formData.top_hits_images}
                     onUploadSuccess={(urls) => setFormData({...formData, top_hits_images: urls})}
                   />
-                  
-                  <p className="text-[10px] text-muted-foreground mt-4 text-center italic">Sincronizado con Supabase Storage Platform (product_assets)</p>
                 </div>
               </div>
 
-              {/* Tags Section */}
+              {/* Tags / Collections Section */}
               <div className="space-y-6">
                 <div className="flex items-center gap-2 text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">
                   <Tag className="w-3 h-3" /> Categorización y Etiquetas
+                  {creatingTag && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span className="text-[9px]">Creando colección...</span>
+                    </span>
+                  )}
                 </div>
                 
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Etiquetas del Producto</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Etiquetas / Colecciones del Producto</label>
                     <div className="relative">
                       <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <input 
@@ -452,52 +540,58 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product, language
                         onChange={(e) => setTagInput(e.target.value)}
                         onKeyDown={handleAddTag}
                         placeholder="Escribe y pulsa Enter para añadir..."
-                        className="w-full bg-input border border-border rounded-2xl pl-12 pr-4 py-4 text-sm text-foreground focus:outline-none focus:border-red-500/50 transition-all"
+                        className="w-full bg-input border border-border rounded-2xl pl-12 pr-16 py-4 text-sm text-foreground focus:outline-none focus:border-red-500/50 transition-all uppercase"
                       />
                       <button 
                         type="button"
                         onClick={() => handleAddTag()}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-red-500 uppercase hover:text-red-400 transition-colors"
+                        disabled={creatingTag}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-red-500 uppercase hover:text-red-400 transition-colors disabled:opacity-50"
                       >
                         Añadir
                       </button>
                     </div>
                   </div>
 
+                  {/* Tags activos */}
                   <div className="flex flex-wrap gap-2">
-                    {formData.tags.map((tag) => (
-                      <span 
-                        key={tag}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600/10 border border-red-500/20 rounded-xl text-[10px] font-bold text-red-500 uppercase tracking-wider group hover:bg-red-600 hover:text-white transition-all cursor-default"
-                      >
-                        {tag}
-                        <button 
-                          type="button"
-                          onClick={() => removeTag(tag)}
-                          className="hover:scale-125 transition-transform"
+                    {formData.tags.map((tag) => {
+                      const isInDB = availableTags.some(t => t.name === tag);
+                      return (
+                        <span 
+                          key={tag}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600/10 border border-red-500/20 rounded-xl text-[10px] font-bold text-red-500 uppercase tracking-wider group hover:bg-red-600 hover:text-white transition-all cursor-default"
                         >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
+                          {tag}
+                          {!isInDB && <span className="text-[8px] opacity-60 font-normal normal-case">nuevo</span>}
+                          <button 
+                            type="button"
+                            onClick={() => removeTag(tag)}
+                            className="hover:scale-125 transition-transform"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
                     {formData.tags.length === 0 && (
-                      <p className="text-[10px] text-muted-foreground italic ml-1">Sin etiquetas asignadas</p>
+                      <p className="text-[10px] text-muted-foreground italic ml-1">Sin etiquetas asignadas. Escribe arriba para añadir.</p>
                     )}
                   </div>
 
-                  {availableTags.length > 0 && (
+                  {/* Sugerencias desde BD (todas las colecciones) */}
+                  {availableTags.filter(t => !formData.tags.includes(t.name)).length > 0 && (
                     <div className="pt-2">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 ml-1">Sugerencias:</p>
-                      <div className="flex flex-wrap gap-2">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 ml-1">Colecciones existentes:</p>
+                      <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto">
                         {availableTags
                           .filter(t => !formData.tags.includes(t.name))
-                          .slice(0, 6)
                           .map(tag => (
                             <button
                               key={tag.id}
                               type="button"
-                              onClick={() => setFormData({ ...formData, tags: [...formData.tags, tag.name] })}
-                              className="px-2 py-1 bg-muted/50 border border-border rounded-lg text-[9px] text-muted-foreground hover:border-foreground hover:text-foreground transition-all"
+                              onClick={() => setFormData(prev => ({ ...prev, tags: [...prev.tags, tag.name] }))}
+                              className="px-2.5 py-1 bg-muted/50 border border-border rounded-lg text-[9px] font-bold text-muted-foreground hover:border-red-500 hover:text-red-500 uppercase transition-all shrink-0"
                             >
                               + {tag.name}
                             </button>

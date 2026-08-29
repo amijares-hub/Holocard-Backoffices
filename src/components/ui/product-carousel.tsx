@@ -63,15 +63,13 @@ export function ProductCarousel({ cards }: ProductCarouselProps) {
 
       <motion.div
         className="flex gap-4 sm:gap-6 whitespace-nowrap"
-        animate={{
-          x: [0, -((cards.length * (window.innerWidth < 640 ? 240 : 320)))], // Adjusted for responsive width
-        }}
+        animate={{ x: ['0%', '-50%'] }}
         transition={{
           x: {
             repeat: Infinity,
-            repeatType: "loop",
-            duration: cards.length * 5,
-            ease: "linear",
+            repeatType: 'loop',
+            duration: Math.max(cards.length * 4, 15),
+            ease: 'linear',
           },
         }}
       >

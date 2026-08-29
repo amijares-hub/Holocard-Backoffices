@@ -11,6 +11,7 @@ import {
   Package
 } from 'lucide-react';
 import { useStore } from '../../lib/StoreContext';
+import { useCartStore } from '../../lib/cartStore';
 import { formatCurrency, cn } from '../../lib/utils';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -21,7 +22,8 @@ interface StoreDrawerProps {
 }
 
 export const StoreDrawer: React.FC<StoreDrawerProps> = ({ isOpen, onClose, tab: initialTab }) => {
-  const { cart, favorites, removeFromCart, updateQuantity, toggleFavorite, addToCart } = useStore();
+  const { favorites, toggleFavorite } = useStore();
+  const { items: cart, removeItem: removeFromCart, updateQuantity, addItem: addToCart } = useCartStore();
   const [activeTab, setActiveTab] = React.useState<'cart' | 'favorites'>(initialTab);
   const navigate = useNavigate();
 
@@ -34,7 +36,7 @@ export const StoreDrawer: React.FC<StoreDrawerProps> = ({ isOpen, onClose, tab: 
   const handleCheckout = () => {
     onClose();
     if (cart.length > 0) {
-      navigate(`/checkout/${cart[0].id}`);
+      navigate('/checkout');
     }
   };
 

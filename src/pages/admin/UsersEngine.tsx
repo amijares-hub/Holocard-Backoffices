@@ -137,16 +137,24 @@ export default function UsersEngine() {
   };
 
   const exportAudiences = () => {
+    // Sanitizar cada campo contra inyección de fórmulas CSV (Excel/Google Sheets)
+    const sanitizeCSV = (str: any) => {
+      const val = String(str ?? '').replace(/"/g, '""');
+      // Prefijo apóstrofe para neutralizar fórmulas que comiencen con =, +, -, @
+      const safeVal = /^[=+@-]/.test(val) ? `'${val}` : val;
+      return `"${safeVal}"`;
+    };
+
     const headers = ['Email', 'Level', 'Tier', 'Total Spent', 'Archetype', 'Last Activity'];
     const csvContent = [
       headers.join(','),
       ...filteredUsers.map(u => [
-        u.email,
-        u.level,
-        u.tier,
-        u.total_spent,
-        u.archetype,
-        u.last_activity
+        sanitizeCSV(u.email),
+        sanitizeCSV(u.level),
+        sanitizeCSV(u.tier),
+        sanitizeCSV(u.total_spent),
+        sanitizeCSV(u.archetype),
+        sanitizeCSV(u.last_activity)
       ].join(','))
     ].join('\n');
 
@@ -328,25 +336,40 @@ export default function UsersEngine() {
       type: 'system'
     }, ...prev]);
 
-    // Batching Simulation & Execution
+    // Batching Execution con manejo de errores por fila
+    let successCount = 0;
+    let failCount = 0;
+
     for (let i = 0; i < targets.length; i++) {
       const target = targets[i];
       
-      const updateData: any = {};
-      if (giftResourceType === 'exp') updateData.points = target.exp + giftAmount;
-      if (giftResourceType === 'pokeballs') updateData.pokeballs = target.pokeballs + giftAmount;
-      if (giftResourceType === 'bp') updateData.points = (target.battle_pass_points || 0) + giftAmount;
+      try {
+        const updateData: any = {};
+        if (giftResourceType === 'exp') updateData.points = target.exp + giftAmount;
+        if (giftResourceType === 'pokeballs') updateData.pokeballs = target.pokeballs + giftAmount;
+        if (giftResourceType === 'bp') updateData.points = (target.battle_pass_points || 0) + giftAmount;
 
-      await supabase.from('user_profiles').update(updateData).eq('id', target.id);
-      
-      if (giftMessage) {
-        // Notification engine logic (placeholder if table missing)
-        await supabase.from('user_notifications').insert({
-          user_id: target.id,
-          message: giftMessage,
-          type: 'gift',
-          read: false
-        }).select();
+        const { error: updateError } = await supabase
+          .from('user_profiles')
+          .update(updateData)
+          .eq('id', target.id);
+
+        if (updateError) throw updateError;
+
+        if (giftMessage) {
+          // Notification engine logic (non-blocking — error no frena el airdrop)
+          await supabase.from('user_notifications').insert({
+            user_id: target.id,
+            message: giftMessage,
+            type: 'gift',
+            read: false
+          }).select().catch(err => console.warn(`Notif skipped for ${target.id}:`, err));
+        }
+
+        successCount++;
+      } catch (rowErr) {
+        console.warn(`[Airdrop] Failed to update user ${target.id}:`, rowErr);
+        failCount++;
       }
 
       setDeployProgress(Math.round(((i + 1) / targets.length) * 100));
@@ -359,7 +382,7 @@ export default function UsersEngine() {
     setLiveLogs(prev => [{
       id: Math.random().toString(),
       timestamp: new Date().toISOString(),
-      message: `AIRDROP COMPLETE: ${targets.length} nodes updated. Broadcast finalized.`,
+      message: `AIRDROP COMPLETE: ${successCount}/${targets.length} nodes updated.${failCount > 0 ? ` ⚠️ ${failCount} errors skipped.` : ' Broadcast finalized.'}`,
       type: 'system'
     }, ...prev]);
   };

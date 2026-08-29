@@ -442,11 +442,13 @@ export default function CheckoutForm({ totalAmount, onSuccess, onError }: Checko
   const [isLoadingIntent, setIsLoadingIntent] = useState(!isMockMode);
 
   useEffect(() => {
-    if (isMockMode) return;
+    if (isMockMode) {
+      setIsLoadingIntent(false);
+      return;
+    }
 
-    // En modo real: llamar a la Edge Function para crear el PaymentIntent
     const amountCents = Math.round(totalAmount * 100);
-    
+
     supabase.functions
       .invoke('create-payment-intent', {
         body: { amount: amountCents, currency: 'eur' },
@@ -456,15 +458,15 @@ export default function CheckoutForm({ totalAmount, onSuccess, onError }: Checko
         if (data?.clientSecret) {
           setClientSecret(data.clientSecret);
         } else {
-          throw new Error('No clientSecret returned');
+          throw new Error('Respuesta inválida del servidor de pagos.');
         }
       })
       .catch((err) => {
-        console.error('[Stripe] Error al invocar Edge Function create-payment-intent:', err);
-        onError?.('No se pudo iniciar el proceso de pago. Inténtalo de nuevo.');
+        console.warn('[Stripe] Modo fallback activado por falta de clientSecret:', err);
+        onError?.('No se pudo conectar con el servidor de pagos real. Contacta con soporte.');
       })
       .finally(() => setIsLoadingIntent(false));
-  }, [totalAmount, isMockMode, onError]);
+  }, [totalAmount, isMockMode]);
 
   const elementsOptions: StripeElementsOptions = {
     clientSecret: clientSecret ?? undefined,

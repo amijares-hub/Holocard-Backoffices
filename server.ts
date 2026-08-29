@@ -2,11 +2,23 @@ import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import axios from 'axios';
+import Stripe from 'stripe';
 
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+
+// IMPORTANTE: el webhook de Stripe necesita el body RAW (sin parsear) para validar la firma.
+// Usamos express.raw() solo para esa ruta y express.json() para el resto.
+app.use(
+  (req, res, next) => {
+    if (req.path === '/api/webhooks/payment-confirmed') {
+      express.raw({ type: 'application/json' })(req, res, next);
+    } else {
+      express.json()(req, res, next);
+    }
+  }
+);
 
 const PORT = process.env.PORT || 3000;
 const MIN_MARGIN = parseFloat(process.env.MIN_MARGIN || '0.15');
@@ -107,10 +119,42 @@ app.post('/api/checkout/logistics', async (req, res) => {
 
 /**
  * 3. PUENTE CONTABLE ODOO
- * Endpoint para disparar facturación legal tras pago confirmado
+ * Endpoint para disparar facturación legal tras pago confirmado por Stripe.
+ * 
+ * SEGURIDAD: Valida la firma HMAC del webhook de Stripe antes de procesar.
+ * Nadie puede confirmar un pedido enviando un POST manual sin la firma válida.
  */
 app.post('/api/webhooks/payment-confirmed', async (req, res) => {
-  const { order_id } = req.body;
+  const sig = req.headers['stripe-signature'] as string;
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!endpointSecret) {
+    console.error('[Webhook] STRIPE_WEBHOOK_SECRET no configurado. Rechazando petición.');
+    return res.status(500).json({ error: 'Webhook secret not configured.' });
+  }
+
+  let event: Stripe.Event;
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', { apiVersion: '2025-06-30.basil' });
+
+  try {
+    // constructEvent valida la firma HMAC-SHA256 — rechaza cualquier payload no firmado por Stripe
+    event = stripe.webhooks.constructEvent(req.body as Buffer, sig, endpointSecret);
+  } catch (err: any) {
+    console.warn('[Webhook] Firma inválida o petición no autorizada:', err.message);
+    return res.status(400).json({ error: `Webhook signature verification failed: ${err.message}` });
+  }
+
+  // Solo procesamos el evento de pago completado
+  if (event.type !== 'payment_intent.succeeded') {
+    return res.json({ received: true, processed: false });
+  }
+
+  const paymentIntent = event.data.object as Stripe.PaymentIntent;
+  const order_id = paymentIntent.metadata?.order_id;
+
+  if (!order_id) {
+    return res.status(400).json({ error: 'order_id no encontrado en metadata del PaymentIntent.' });
+  }
 
   try {
     // 1. Obtener datos del pedido y cliente
@@ -123,19 +167,16 @@ app.post('/api/webhooks/payment-confirmed', async (req, res) => {
     if (error || !order) throw new Error('Pedido no encontrado');
 
     // 2. Enviar a Odoo (Mock de llamada a account.move)
-    // En producción, aquí se usaría el protocolo XML-RPC o el Odoo JSON-RPC
     const odooPayload = {
       partner_id: order.customer_nif,
       invoice_date: new Date().toISOString().split('T')[0],
       move_type: 'out_invoice',
       invoice_line_ids: [
-        // Aquí se mapearían las líneas del pedido
         [0, 0, { name: 'Venta de Cartas Pokémon', quantity: 1, price_unit: order.total_amount }]
       ],
       fiscal_position_id: 'Régimen Nacional'
     };
 
-    // Ejemplo de integración con Odoo API (sustituir con credenciales reales)
     const odooResponse = await axios.post(`${process.env.ODOO_URL}/api/v1/invoice`, odooPayload, {
       headers: { 'X-Odoo-API-Key': process.env.ODOO_API_KEY }
     });

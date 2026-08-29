@@ -19,7 +19,8 @@ import {
   Sun,
   Moon,
   MessageSquare,
-  Maximize2
+  Maximize2,
+  Truck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../../lib/supabase';
@@ -33,6 +34,7 @@ const navItems = [
   { icon: FolderTree, label: 'Taxonomía', path: '/admin/taxonomy' },
   { icon: Layers, label: 'Collections', path: '/admin/collections' },
   { icon: ShoppingCart, label: 'Orders', path: '/admin/orders' },
+  { icon: Truck, label: 'Logística y Tracking', path: '/admin/tracking' },
   { icon: CreditCard, label: 'POS Terminal', path: '/admin/pos' },
   { icon: Crosshair, label: 'Users Engine', path: '/admin/users' },
   { icon: MessageSquare, label: 'Chatbot Settings', path: '/admin/chatbot' },
@@ -47,7 +49,14 @@ export default function AdminLayout() {
   const location = useLocation();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = '/admin/login';
+    } catch (err) {
+      console.error("Error al cerrar sesión:", err);
+    }
   };
 
   // ── Fase 25: Abrir en pestaña completa ────────────────────────────────────
@@ -55,7 +64,12 @@ export default function AdminLayout() {
   // En desarrollo/Vercel, abre una nueva ventana del navegador.
   const openInFullTab = () => {
     if (typeof chrome !== 'undefined' && chrome.tabs && chrome.runtime) {
-      chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
+      try {
+        chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
+      } catch (err) {
+        console.error("Error opening full tab via Chrome API:", err);
+        window.open('/', '_blank');
+      }
     } else {
       window.open('/', '_blank');
     }

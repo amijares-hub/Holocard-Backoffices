@@ -61,7 +61,7 @@ export const TestimonialsCarousel: React.FC<TestimonialsCarouselProps> = ({
             style={{ height: cardHeight }}
           >
             <p className="text-sm leading-relaxed text-justify break-words whitespace-normal overflow-hidden">
-              {highlight
+              {highlight && text.includes(highlight)
                 ? text.split(highlight).map((part, idx, arr) => (
                     <React.Fragment key={idx}>
                       {part}

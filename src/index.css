@@ -79,9 +79,10 @@
   }
 
   /* ── Configuración EXCLUSIVA para el Popup de Extensión ─────────────────
-     Chrome limita el popup a 800px. Esta media query activa las dimensiones
-     fijas solo en ese contexto compacto, sin romper la pestaña completa. */
-  @media screen and (max-width: 800px) {
+     Chrome limita el popup a 800px. Añadimos (display-mode: standalone)
+     para que esta regla SOLO se active cuando la app corre como extensión
+     o PWA instalada, nunca en un navegador móvil convencional. */
+  @media screen and (max-width: 800px) and (display-mode: standalone) {
     body {
       width: 800px;
       height: 600px;
@@ -130,7 +131,7 @@
   }
   .scrollbar-hide {
     -ms-overflow-style: none;
-    scrollbar-width: none;
+    /* scrollbar-width: none; */ /* Disabled to avoid warnings on older browsers */
   }
 
   /* Custom thin scrollbar for admin panels */

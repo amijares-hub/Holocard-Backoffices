@@ -83,9 +83,15 @@ export default function FloatingChatBot() {
   const handleSendMessage = (text: string) => {
     if (!text.trim()) return;
 
+    // Sanitizar entrada del usuario
+    const sanitizedText = text
+      .trim()
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
     const userMsg: Message = {
       sender: 'user',
-      text: text.trim(),
+      text: sanitizedText,
       timestamp: new Date()
     };
 
@@ -95,7 +101,7 @@ export default function FloatingChatBot() {
 
     // Bot response simulation with standard 800ms thinking delay
     setTimeout(() => {
-      const botReplyText = getFAQAnswer(text);
+      const botReplyText = getFAQAnswer(sanitizedText);
       const botMsg: Message = {
         sender: 'bot',
         text: botReplyText,

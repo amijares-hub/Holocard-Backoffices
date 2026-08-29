@@ -66,6 +66,9 @@ export const StoreNavbar = () => {
     }
   };
 
+  const rawBgColor = headerData.announcement_bar?.bgColor || '#F3B91C';
+  const bannerBgColor = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(rawBgColor) ? rawBgColor : '#F3B91C';
+
   return (
     <>
       {marketing?.countdown?.isActive && (
@@ -86,7 +89,7 @@ export const StoreNavbar = () => {
             "fixed left-0 right-0 z-[110] h-8 flex items-center justify-center overflow-hidden",
             marketing?.countdown?.isActive ? "top-10" : "top-0"
           )}
-          style={{ backgroundColor: headerData.announcement_bar.bgColor }}
+          style={{ backgroundColor: bannerBgColor }}
         >
           <div 
             className="flex items-center gap-8 animate-marquee-right whitespace-nowrap"

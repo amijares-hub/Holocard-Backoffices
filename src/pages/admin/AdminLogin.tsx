@@ -13,7 +13,7 @@ import { supabase } from '../../lib/supabase';
 import { SessionStore } from '../../lib/sessionStore';
 import {
   ShieldCheck, Lock, Mail, Loader2,
-  ArrowRight, AlertCircle, Zap, Maximize2, Clock
+  ArrowRight, AlertCircle, Maximize2, Clock
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -41,9 +41,7 @@ export const AdminLogin = () => {
   const [selectedHours, setSelectedHours] = useState<24 | 48 | 168>(168); // default: 1 semana
   const navigate = useNavigate();
 
-  const handleDevBypass = () => {
-    navigate('/admin');
-  };
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,15 +188,7 @@ export const AdminLogin = () => {
               )}
             </button>
 
-            {/* Dev Bypass */}
-            <button
-              type="button"
-              onClick={handleDevBypass}
-              className="w-full py-4 bg-zinc-900 border border-zinc-800 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-zinc-800 transition-all mt-4 text-zinc-400 group"
-            >
-              <Zap className="w-4 h-4 text-red-500 group-hover:scale-125 transition-transform" />
-              Dev Mode: Skip Authorization
-            </button>
+
           </form>
 
           <div className="pt-6 border-t border-white/5 text-center">

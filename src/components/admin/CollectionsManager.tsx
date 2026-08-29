@@ -1,390 +1,725 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+"use client"
+
+import React, { useState, useEffect, useRef } from "react"
 import { 
-  Tag, Package, Search, ChevronRight, 
-  Layers, Filter, ImageIcon, ArrowLeft, Plus, Trash2, Edit2, 
-  CheckSquare, Square, X, Check, GripVertical
-} from 'lucide-react';
-import { AnimatePresence, Reorder } from 'motion/react';
-import { supabase } from '../../lib/supabase';
-import { cn } from '../../lib/utils';
+  FolderPlus, 
+  Trash2, 
+  Package, 
+  Plus, 
+  Sparkles, 
+  Check, 
+  Search,
+  Layers,
+  RefreshCw,
+  ChevronRight,
+  Tag,
+  Pencil,
+  X,
+  CheckSquare,
+  Square,
+  AlertTriangle
+} from "lucide-react"
+import { supabase } from "../../lib/supabase"
 
-export const CollectionsManager = () => {
-  const [tags, setTags] = useState<{id: string, name: string, count: number, order_index: number}[]>([]);
-  const [selectedTag, setSelectedTag] = useState<{id: string, name: string} | null>(null);
-  const [products, setProducts] = useState<any[]>([]);
+type Collection = {
+  id: string
+  name: string
+  created_at?: string
+  product_count?: number
+}
+
+type Product = {
+  id: string
+  name: string
+  image_url?: string
+  price: number
+  category?: string
+  tags?: string[] | string
+  collection?: string
+}
+
+const findValueByKeywords = (obj: any, keywords: string[]) => {
+  if (!obj || typeof obj !== 'object') return null;
+  const keys = Object.keys(obj);
+  
+  for (let key of keys) {
+    const normalizedKey = key.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (keywords.some(kw => normalizedKey.includes(kw))) {
+      return obj[key];
+    }
+  }
+  return null;
+};
+
+const normalizeText = (text: string = "") => {
+  return String(text)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+};
+
+export function CollectionsManager() {
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  const [assignedProductIds, setAssignedProductIds] = useState<Set<string>>(new Set());
+  
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [isCreating, setIsCollectionCreating] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [editingTag, setEditingTag] = useState<{id: string, name: string} | null>(null);
-  const [newTagName, setNewTagName] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const [isUpdatingOrder, setIsUpdatingOrder] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  useEffect(() => {
-    fetchTags();
-  }, []);
+  // Rename state
+  const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
+  const [editingCollectionName, setEditingCollectionName] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchTags = async () => {
+  // Bulk action state
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+
+  const fetchData = async () => {
     setLoading(true);
     try {
-      // Intentar fetch con ordenación
-      const { data: tagsData, error: tagsError } = await supabase
-        .from('tags')
-        .select('id, name, order_index')
-        .order('order_index', { ascending: true });
-      
-      if (tagsError) {
-        // Si falla (ej: no existe order_index), intentar fetch simple
-        console.warn('Fallo al ordenar por order_index, reintentando fetch simple:', tagsError.message);
-        const { data: simpleData, error: simpleError } = await supabase
-          .from('tags')
-          .select('id, name');
-        
-        if (simpleError) throw simpleError;
-        
-        if (simpleData) {
-          const tagsWithCount = await Promise.all(simpleData.map(async (tag) => {
-            const { count } = await supabase
-              .from('product_tags')
-              .select('*', { count: 'exact', head: true })
-              .eq('tag_id', tag.id);
-            return { ...tag, count: count || 0, order_index: 0 };
-          }));
-          setTags(tagsWithCount);
+      if (!supabase) return;
+
+      const { data: colsData } = await supabase
+        .from('collections')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      const { data: prodsData } = await supabase
+        .from('products')
+        .select('*');
+
+      const { data: pivotData } = await supabase
+        .from('product_collections')
+        .select('*');
+
+      const formattedProds: Product[] = (prodsData || []).map((p: any) => {
+        let rawImg = findValueByKeywords(p, ["imag", "img", "portad", "thumb", "foto", "pic", "image_url"]);
+        let finalImg = rawImg || "";
+        if (Array.isArray(finalImg)) finalImg = finalImg[0];
+        if (typeof finalImg === 'object' && finalImg !== null) finalImg = Object.values(finalImg)[0];
+
+        let rawTags = p.tags || p.etiquetas || p.collection || findValueByKeywords(p, ["tag", "etiquet", "collect"]);
+
+        return {
+          id: String(p.id),
+          name: p.name || p.title || p.producto || "Producto TCG",
+          image_url: finalImg,
+          price: parseFloat(p.base_price) || parseFloat(p.price) || parseFloat(p.precio) || 0,
+          category: p.category || "",
+          tags: rawTags,
+          collection: p.collection || ""
+        };
+      });
+
+      const tagsFromInventory = new Set<string>();
+      formattedProds.forEach(p => {
+        let raw = p.tags;
+        if (Array.isArray(raw)) {
+          raw.forEach(t => typeof t === 'string' && t.trim() && tagsFromInventory.add(t.trim().toUpperCase()));
+        } else if (typeof raw === 'string') {
+          raw.split(',').forEach(t => t.trim() && tagsFromInventory.add(t.trim().toUpperCase()));
         }
-      } else if (tagsData) {
-        const tagsWithCount = await Promise.all(tagsData.map(async (tag) => {
-          const { count } = await supabase
-            .from('product_tags')
-            .select('*', { count: 'exact', head: true })
-            .eq('tag_id', tag.id);
-          return { ...tag, count: count || 0 };
-        }));
-        setTags(tagsWithCount);
+      });
+
+      const collectionsMap = new Map<string, Collection>();
+
+      (colsData || []).forEach((c: any) => {
+        const cName = String(c.name || c.nombre || "").toUpperCase();
+        if (cName) {
+          collectionsMap.set(cName, {
+            id: String(c.id),
+            name: cName,
+            created_at: c.created_at,
+            product_count: 0
+          });
+        }
+      });
+
+      tagsFromInventory.forEach(tag => {
+        if (tag && !collectionsMap.has(tag)) {
+          collectionsMap.set(tag, {
+            id: `tag-${tag.toLowerCase()}`,
+            name: tag,
+            product_count: 0
+          });
+        }
+      });
+
+      const allCollections = Array.from(collectionsMap.values());
+
+      const pivotCounts = new Map<string, Set<string>>();
+      (pivotData || []).forEach((pc: any) => {
+        const cId = String(pc.collection_id);
+        if (!pivotCounts.has(cId)) pivotCounts.set(cId, new Set());
+        pivotCounts.get(cId)!.add(String(pc.product_id));
+      });
+
+      allCollections.forEach(col => {
+        const colNorm = normalizeText(col.name);
+        const matchedProds = formattedProds.filter(p => {
+          if (pivotCounts.has(col.id) && pivotCounts.get(col.id)!.has(p.id)) return true;
+          const pDataStr = normalizeText(`${p.collection} ${JSON.stringify(p.tags)}`);
+          return pDataStr.includes(colNorm);
+        });
+        col.product_count = matchedProds.length;
+      });
+
+      setCollections(allCollections);
+      setProducts(formattedProds);
+
+      if (allCollections.length > 0 && !selectedCollection) {
+        handleSelectCollection(allCollections[0], formattedProds);
       }
-    } catch (error) {
-      console.error('Error fetching tags:', error);
+    } catch (err) {
+      console.error("Error sincronizando colecciones con inventario:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleReorder = async (newOrder: any[]) => {
-    setTags(newOrder);
-    setIsUpdatingOrder(true);
+  useEffect(() => {
+    fetchData();
+
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel('realtime-collections-manager')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'collections' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_collections' }, () => fetchData())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  // Focus rename input on edit start
+  useEffect(() => {
+    if (editingCollectionId && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [editingCollectionId]);
+
+  const handleSelectCollection = async (collection: Collection, prodsList = products) => {
+    setSelectedCollection(collection);
+    setBulkMode(false);
+    setBulkSelectedIds(new Set());
+    const assignedIds = new Set<string>();
+    const colNorm = normalizeText(collection.name);
+
+    prodsList.forEach(p => {
+      const pDataStr = normalizeText(`${p.collection} ${JSON.stringify(p.tags)}`);
+      if (pDataStr.includes(colNorm)) assignedIds.add(p.id);
+    });
+
     try {
-      const updates = newOrder.map((tag, index) => ({
-        id: tag.id,
-        name: tag.name,
-        order_index: index
-      }));
-      const { error } = await supabase.from('tags').upsert(updates);
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error updating order:', error);
-    } finally {
-      setIsUpdatingOrder(false);
+      if (supabase && !collection.id.startsWith('tag-')) {
+        const { data } = await supabase
+          .from('product_collections')
+          .select('product_id')
+          .eq('collection_id', collection.id);
+        data?.forEach((item: any) => assignedIds.add(String(item.product_id)));
+      }
+    } catch (err) {
+      console.warn("Lectura relacional:", err);
+    }
+
+    setAssignedProductIds(assignedIds);
+  };
+
+  // ─── RENOMBRAR COLECCION ───
+  const startRenaming = (col: Collection, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingCollectionId(col.id);
+    setEditingCollectionName(col.name);
+  };
+
+  const handleSaveRename = async () => {
+    if (!editingCollectionId) return;
+    const newName = editingCollectionName.trim().toUpperCase();
+    const oldCol = collections.find(c => c.id === editingCollectionId);
+    if (!newName || !oldCol || newName === oldCol.name) {
+      setEditingCollectionId(null);
+      return;
+    }
+    const oldName = oldCol.name;
+    setCollections(prev => prev.map(c => c.id === editingCollectionId ? { ...c, name: newName } : c));
+    if (selectedCollection?.id === editingCollectionId) {
+      setSelectedCollection(prev => prev ? { ...prev, name: newName } : null);
+    }
+    setEditingCollectionId(null);
+    try {
+      if (supabase && !editingCollectionId.startsWith('tag-') && !editingCollectionId.startsWith('col-')) {
+        await supabase.from('collections').update({ name: newName }).eq('id', editingCollectionId);
+        const affectedProds = products.filter(p => {
+          const arr = Array.isArray(p.tags) ? p.tags : typeof p.tags === 'string' ? p.tags.split(',').map(t => t.trim()) : [];
+          return arr.some(t => t.toUpperCase() === oldName);
+        });
+        for (const prod of affectedProds) {
+          let arr = Array.isArray(prod.tags) ? [...prod.tags] : typeof prod.tags === 'string' ? prod.tags.split(',').map(t => t.trim()) : [];
+          arr = arr.map(t => t.toUpperCase() === oldName ? newName : t);
+          // await supabase.from('products').update({ tags: arr }).eq('id', prod.id);
+        }
+      }
+    } catch (err) {
+      console.error("Error renombrando coleccion:", err);
     }
   };
 
-  const fetchProductsByTag = async (tag: {id: string, name: string}) => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('product_tags')
-      .select('products(*)')
-      .eq('tag_id', tag.id);
-    if (data) {
-      setProducts(data.map((item: any) => item.products));
-    }
-    setLoading(false);
+  // ─── BULK ACTIONS ───
+  const toggleBulkProduct = (productId: string) => {
+    setBulkSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(productId)) next.delete(productId); else next.add(productId);
+      return next;
+    });
   };
 
-  const handleTagClick = (tag: {id: string, name: string}) => {
-    if (editingTag) return;
-    setSelectedTag(tag);
-    fetchProductsByTag(tag);
+  const toggleSelectAll = () => {
+    const af = filteredProducts.filter(p => assignedProductIds.has(p.id));
+    if (bulkSelectedIds.size === af.length && af.length > 0) setBulkSelectedIds(new Set());
+    else setBulkSelectedIds(new Set(af.map(p => p.id)));
   };
 
-  const handleCreateTag = async () => {
-    const trimmedName = newTagName.trim();
-    if (!trimmedName) return;
+  const handleBulkRemove = async () => {
+    if (!selectedCollection || bulkSelectedIds.size === 0) return;
+    if (!confirm(`Quitar ${bulkSelectedIds.size} producto(s) de "${selectedCollection.name}"?`)) return;
+    const idsToRemove = Array.from(bulkSelectedIds);
+    const newAssigned = new Set(assignedProductIds);
+    idsToRemove.forEach(id => newAssigned.delete(id));
+    setAssignedProductIds(newAssigned);
+    setCollections(prev => prev.map(c => c.id === selectedCollection.id ? { ...c, product_count: newAssigned.size } : c));
+    setBulkSelectedIds(new Set());
+    setBulkMode(false);
     try {
-      const slug = trimmedName.toLowerCase()
-        .replace(/ /g, '-')
-        .replace(/[^\w-]+/g, ''); 
-        
-      // 1. Crear o recuperar el Tag (usando upsert para ser resilientes)
-      const { data: tagData, error: tagError } = await supabase
-        .from('tags')
-        .upsert([{ 
-          name: trimmedName,
-          slug: slug,
-          order_index: tags.length
-        }], { onConflict: 'name' })
-        .select()
-        .single();
-      
-      if (tagError) throw tagError;
-
-      // 2. Lógica de Sincronización Automática:
-      // Si existe una Categoría con el mismo nombre, vinculamos sus productos automáticamente.
-      if (tagData) {
-        const { data: category } = await supabase
-          .from('categories')
-          .select('id')
-          .ilike('name', trimmedName)
-          .maybeSingle();
-
-        if (category) {
-          const { data: productsInCategory } = await supabase
-            .from('products')
-            .select('id')
-            .eq('category_id', category.id);
-
-          if (productsInCategory && productsInCategory.length > 0) {
-            const relations = productsInCategory.map(p => ({
-              product_id: p.id,
-              tag_id: tagData.id
-            }));
-
-            // Insertar relaciones ignorando duplicados
-            await supabase.from('product_tags').upsert(relations, { onConflict: 'product_id,tag_id' });
+      if (supabase) {
+        if (!selectedCollection.id.startsWith('tag-') && !selectedCollection.id.startsWith('col-')) {
+          for (const pid of idsToRemove) {
+            await supabase.from('product_collections').delete().eq('collection_id', selectedCollection.id).eq('product_id', pid);
+          }
+        }
+        for (const pid of idsToRemove) {
+          const prod = products.find(p => p.id === pid);
+          if (prod) {
+            let arr = Array.isArray(prod.tags) ? [...prod.tags] : typeof prod.tags === 'string' ? prod.tags.split(',').map(t => t.trim()) : [];
+            arr = arr.filter(t => t.toUpperCase() !== selectedCollection.name);
+            prod.tags = arr;
+            // await supabase.from('products').update({ tags: arr }).eq('id', pid);
           }
         }
       }
-      
-      setNewTagName('');
-      setIsCreating(false);
-      fetchTags();
-    } catch (error: any) {
-      console.error('Error creating tag:', error);
-      alert(`Error al crear colección: ${error.message || 'Verifica la consola'}`);
-    }
+    } catch (err) { console.error("Error en bulk remove:", err); }
   };
 
-  const handleUpdateTag = async () => {
-    if (!editingTag || !editingTag.name.trim()) return;
+  const handleCreateCollection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = newCollectionName.trim().toUpperCase();
+    if (!cleanName) return;
+
+    setIsCollectionCreating(true);
+
+    const tempId = `col-${Date.now()}`;
+    const newColObj: Collection = {
+      id: tempId,
+      name: cleanName,
+      product_count: 0
+    };
+
+    setCollections(prev => [newColObj, ...prev]);
+    setSelectedCollection(newColObj);
+    setAssignedProductIds(new Set());
+    setNewCollectionName("");
+
     try {
-      const trimmedName = editingTag.name.trim();
-      const slug = trimmedName.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+      if (supabase) {
+        const { data } = await supabase
+          .from('collections')
+          .insert([{ name: cleanName }])
+          .select()
+          .maybeSingle();
 
-      const { error } = await supabase
-        .from('tags')
-        .update({ 
-          name: trimmedName,
-          slug: slug 
-        })
-        .eq('id', editingTag.id);
-        
-      if (error) throw error;
-      setEditingTag(null);
-      fetchTags();
-    } catch (error: any) {
-      console.error('Error updating tag:', error);
-      alert(`Error al actualizar: ${error.message}`);
+        if (data) {
+          const realCol: Collection = {
+            id: String(data.id),
+            name: String(data.name).toUpperCase(),
+            product_count: 0
+          };
+
+          setCollections(prev => prev.map(c => c.id === tempId ? realCol : c));
+          setSelectedCollection(realCol);
+        }
+      }
+    } catch (err) {
+      console.warn("Creación local activa:", err);
+    } finally {
+      setIsCollectionCreating(false);
     }
   };
 
-  const handleDeleteTags = async (ids: string[]) => {
-    if (!window.confirm(`¿Estás seguro de que deseas eliminar ${ids.length === 1 ? 'esta colección' : `estas ${ids.length} colecciones`}? Se eliminarán las referencias de los productos.`)) return;
+  const handleDeleteCollection = async (id: string, name: string) => {
+    if (!confirm(`¿Estás seguro de eliminar la colección "${name}"?`)) return;
+
+    setCollections(prev => prev.filter(c => c.id !== id));
+
+    if (selectedCollection?.id === id) {
+      setSelectedCollection(null);
+      setAssignedProductIds(new Set());
+    }
+
     try {
-      const { error } = await supabase.from('tags').delete().in('id', ids);
-      if (error) throw error;
-      setSelectedTagIds(prev => prev.filter(id => !ids.includes(id)));
-      fetchTags();
-    } catch (error) {
-      console.error('Error deleting tags:', error);
+      if (supabase && !id.startsWith('col-') && !id.startsWith('tag-')) {
+        await supabase.from('collections').delete().eq('id', id);
+      }
+    } catch (err) {
+      console.error("Error al eliminar en backend:", err);
     }
   };
 
-  const toggleSelectTag = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    setSelectedTagIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  const toggleProductAssignment = async (productId: string) => {
+    if (!selectedCollection) return;
+    if (bulkMode) {
+      if (assignedProductIds.has(productId)) toggleBulkProduct(productId);
+      return;
+    }
+    const newAssigned = new Set(assignedProductIds);
+    const isCurrentlyAssigned = newAssigned.has(productId);
+    if (isCurrentlyAssigned) newAssigned.delete(productId); else newAssigned.add(productId);
+    setAssignedProductIds(newAssigned);
+    setCollections(prev => prev.map(c => c.id === selectedCollection.id ? { ...c, product_count: newAssigned.size } : c));
+    try {
+      if (supabase) {
+        if (!selectedCollection.id.startsWith('tag-') && !selectedCollection.id.startsWith('col-')) {
+          if (isCurrentlyAssigned) {
+            await supabase.from('product_collections').delete().eq('collection_id', selectedCollection.id).eq('product_id', productId);
+          } else {
+            await supabase.from('product_collections').insert([{ collection_id: selectedCollection.id, product_id: productId }]);
+          }
+        }
+        const prod = products.find(p => p.id === productId);
+        if (prod) {
+          let arr = Array.isArray(prod.tags) ? [...prod.tags] : typeof prod.tags === 'string' ? prod.tags.split(',').map(t => t.trim()) : [];
+          if (isCurrentlyAssigned) arr = arr.filter(t => t.toUpperCase() !== selectedCollection.name);
+          else if (!arr.some(t => t.toUpperCase() === selectedCollection.name)) arr.push(selectedCollection.name);
+          prod.tags = arr;
+          // await supabase.from('products').update({ tags: arr }).eq('id', productId);
+        }
+      }
+    } catch (err) { console.warn("Sincronizacion realizada:", err); }
   };
+
+  const filteredProducts = products.filter(p => {
+    if (!searchTerm.trim()) return true;
+    const term = normalizeText(searchTerm);
+    return normalizeText(p.name).includes(term) || normalizeText(p.category).includes(term);
+  });
+
+  const assignedFiltered = filteredProducts.filter(p => assignedProductIds.has(p.id));
+  const unassignedFiltered = filteredProducts.filter(p => !assignedProductIds.has(p.id));
 
   return (
-    <div className="space-y-8 w-full max-w-7xl mx-auto p-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex items-center justify-between">
+    <div className="w-full min-h-screen bg-[#060c17] text-white p-4 md:p-8 flex flex-col gap-6">
+      
+      {/* HEADER PRINCIPAL */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-6">
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Layers className="w-5 h-5 text-red-500" />
-            <span className="text-[10px] font-black text-red-500 uppercase tracking-[0.3em]">Merchandising Engine</span>
-          </div>
-          <h2 className="text-3xl font-black text-foreground tracking-tight uppercase italic transition-colors">Gestor de Colecciones</h2>
-          <p className="text-sm text-muted-foreground mt-1 transition-colors">Organiza tus productos por etiquetas estratégicas.</p>
+          <span className="text-xs font-black tracking-widest text-yellow-400 uppercase flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4" /> MERCHANDISING ENGINE
+          </span>
+          <h1 className="text-2xl md:text-4xl font-black uppercase tracking-tight text-white mt-1">
+            GESTOR DE COLECCIONES E INVENTARIO
+          </h1>
+          <p className="text-gray-400 text-xs md:text-sm font-light mt-0.5">
+            Colecciones y etiquetas del Inventario en tiempo real.
+          </p>
         </div>
 
-        {!selectedTag && (
-          <button 
-            onClick={() => setIsCreating(true)}
-            title="Crear nueva colección"
-            className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-2xl text-xs font-black flex items-center gap-2 transition-all uppercase tracking-widest shadow-xl shadow-primary/20 active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            Nueva Colección
-          </button>
-        )}
+        <button
+          onClick={fetchData}
+          className="self-start md:self-auto bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all active:scale-95"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Sincronizar
+        </button>
       </div>
 
-      <AnimatePresence>
-        {selectedTagIds.length > 0 && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="bg-red-600/10 border border-red-500/20 p-4 rounded-3xl flex items-center justify-between"
-          >
-            <div className="flex items-center gap-3 px-2">
-              <CheckSquare className="w-5 h-5 text-red-500" />
-              <span className="text-sm font-bold text-red-100 tracking-tight">{selectedTagIds.length} colecciones seleccionadas</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setSelectedTagIds([])} className="px-4 py-2 text-[10px] font-black text-muted-foreground hover:text-foreground uppercase tracking-widest transition-colors" title="Cancelar selección">Cancelar</button>
-              <button onClick={() => handleDeleteTags(selectedTagIds)} className="bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-xl text-[10px] font-black flex items-center gap-2 transition-all uppercase tracking-widest shadow-lg shadow-primary/40" title="Eliminar colecciones seleccionadas"><Trash2 className="w-4 h-4" />Eliminar Selección</button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* CREAR COLECCIÓN / ETIQUETA */}
+      <form onSubmit={handleCreateCollection} className="flex gap-3 max-w-xl bg-[#0a1628] p-2 rounded-2xl border border-white/10 shadow-xl">
+        <input
+          type="text"
+          placeholder="NOMBRE DE LA NUEVA COLECCIÓN O ETIQUETA..."
+          value={newCollectionName}
+          onChange={(e) => setNewCollectionName(e.target.value)}
+          className="flex-1 bg-transparent px-4 text-xs font-bold text-white placeholder-gray-500 focus:outline-none uppercase"
+        />
+        <button
+          type="submit"
+          disabled={isCreating || !newCollectionName.trim()}
+          className="bg-yellow-400 hover:bg-yellow-300 text-black font-black px-5 py-2.5 rounded-xl text-xs uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+        >
+          <Plus className="w-4 h-4 stroke-[3]" /> Crear Colección
+        </button>
+      </form>
 
-      {!selectedTag && (
-      <div className="space-y-4">
-        <AnimatePresence>
-          {isCreating && (
-            <motion.div 
-              initial={{ opacity: 0, height: 0 }} 
-              animate={{ opacity: 1, height: 'auto' }} 
-              exit={{ opacity: 0, height: 0 }}
-              className="bg-card border-2 border-dashed border-primary/30 p-8 rounded-[2.5rem] flex flex-col md:flex-row items-end gap-6 mb-8 overflow-hidden transition-colors"
-            >
-              <div className="flex-1 space-y-2 w-full">
-                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Nombre de la Nueva Colección</label>
-                <div className="relative">
-                  <Tag className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input 
-                    autoFocus 
-                    type="text" 
-                    title="Nombre de la nueva colección"
-                    value={newTagName} 
-                    onChange={(e) => setNewTagName(e.target.value)} 
-                    onKeyDown={(e) => e.key === 'Enter' && handleCreateTag()}
-                    placeholder="Ej: Ofertas Black Friday" 
-                    className="w-full bg-input border border-border rounded-2xl pl-12 pr-4 py-4 text-foreground text-sm focus:outline-none focus:border-primary/50 transition-all font-bold uppercase" 
-                  />
-                </div>
-              </div>
-              <div className="flex gap-3 w-full md:w-auto">
-                <button 
-                  onClick={handleCreateTag} 
-                  title="Guardar nueva colección"
-                  className="flex-1 md:flex-none bg-primary hover:bg-primary/90 text-white px-10 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-primary/40 active:scale-95"
-                >
-                  Crear Ahora
-                </button>
-                <button 
-                  onClick={() => setIsCreating(false)} 
-                  title="Cancelar creación"
-                  className="px-5 py-4 bg-muted text-muted-foreground hover:text-foreground rounded-2xl transition-all border border-border"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {isUpdatingOrder && (
-          <div className="flex justify-end">
-            <span className="text-[10px] font-black text-emerald-500 animate-pulse uppercase tracking-widest">Guardando orden...</span>
-          </div>
-        )}
+      {/* GRID DOS COLUMNAS */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        <Reorder.Group values={tags} onReorder={handleReorder} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {loading ? (
-            <div className="col-span-full py-20 text-center text-zinc-500">Cargando colecciones...</div>
-          ) : tags.length === 0 ? (
-            <div className="col-span-full py-20 text-center bg-card/50 rounded-3xl border border-border transition-colors">
-              <Tag className="w-12 h-12 text-muted mx-auto mb-4 opacity-20" />
-              <p className="text-muted-foreground uppercase tracking-widest text-xs font-bold">No hay etiquetas creadas aún</p>
+        {/* COLUMNA IZQUIERDA: LISTA DE COLECCIONES Y ETIQUETAS */}
+        <div className="lg:col-span-5 flex flex-col gap-3">
+          <h2 className="text-xs font-black uppercase tracking-widest text-gray-400 px-1 flex items-center gap-2">
+            <Layers className="w-4 h-4 text-yellow-400" /> Colecciones y Etiquetas ({collections.length})
+          </h2>
+
+          {collections.length === 0 ? (
+            <div className="p-10 text-center bg-[#0a1628]/50 rounded-2xl border border-white/5 text-gray-500 text-xs font-bold uppercase tracking-wider">
+              No hay colecciones creadas.
             </div>
           ) : (
-            tags.map((tag) => (
-                <Reorder.Item value={tag} key={tag.id} layout className={cn("bg-zinc-900/50 border p-6 rounded-3xl text-left transition-all group relative overflow-hidden", selectedTagIds.includes(tag.id) ? "border-red-500/50 bg-red-500/5" : "border-white/5 hover:border-red-500/30", !editingTag && "cursor-pointer")} onClick={() => handleTagClick(tag)}>
-                  <div className="absolute top-4 left-4 z-20 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"><GripVertical className="w-4 h-4" /></div>
-                  <button onClick={(e) => toggleSelectTag(e, tag.id)} title="Seleccionar colección" className={cn("absolute top-4 right-4 z-20 p-2 rounded-lg transition-all", selectedTagIds.includes(tag.id) ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground opacity-0 group-hover:opacity-100")}>{selectedTagIds.includes(tag.id) ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}</button>
-                  <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity"><Tag className="w-20 h-20 text-foreground" /></div>
-                  <div className="flex justify-between items-start mb-4 pl-6">
-                    <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 transition-colors"><Tag className="w-6 h-6 text-primary" /></div>
-                    {!editingTag && <span className="text-[10px] font-mono text-muted-foreground bg-muted px-2 py-1 rounded-md transition-colors">{tag.count} ITEMS</span>}
-                  </div>
-                  {editingTag?.id === tag.id ? (
-                    <div className="space-y-4" onClick={e => e.stopPropagation()}>
-                      <input autoFocus type="text" title="Editar nombre de colección" value={editingTag.name} onChange={(e) => setEditingTag({...editingTag, name: e.target.value})} className="w-full bg-input border border-primary/50 rounded-xl px-3 py-2 text-foreground text-sm font-bold uppercase transition-colors" />
-                      <div className="flex gap-2">
-                        <button onClick={handleUpdateTag} title="Confirmar cambios" className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-[10px] font-black uppercase tracking-widest"><Check className="w-4 h-4 mx-auto" /></button>
-                        <button onClick={() => setEditingTag(null)} title="Cancelar edición" className="flex-1 bg-muted text-muted-foreground py-2 rounded-lg text-[10px] font-black uppercase tracking-widest"><X className="w-4 h-4 mx-auto" /></button>
+            <div className="flex flex-col gap-2.5 max-h-[640px] overflow-y-auto pr-1">
+              {collections.map((col) => {
+                const isSelected = selectedCollection?.id === col.id;
+                const isEditing = editingCollectionId === col.id;
+
+                return (
+                  <div
+                    key={col.id}
+                    onClick={() => !isEditing && handleSelectCollection(col)}
+                    className={`relative p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between group ${
+                      isSelected
+                        ? "bg-[#0d1f38] border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.15)]"
+                        : "bg-[#0a1628]/80 hover:bg-[#0a1628] border-white/10 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className={`p-2.5 rounded-xl border shrink-0 ${isSelected ? 'bg-yellow-400/10 border-yellow-400/40 text-yellow-400' : 'bg-white/5 border-white/10 text-gray-400'}`}>
+                        <FolderPlus className="w-5 h-5" />
+                      </div>
+                      <div className="flex flex-col flex-1 min-w-0">
+                        {isEditing ? (
+                          <input
+                            ref={renameInputRef}
+                            value={editingCollectionName}
+                            onChange={e => setEditingCollectionName(e.target.value.toUpperCase())}
+                            onBlur={handleSaveRename}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { e.preventDefault(); handleSaveRename(); }
+                              if (e.key === 'Escape') setEditingCollectionId(null);
+                            }}
+                            onClick={e => e.stopPropagation()}
+                            className="bg-[#1a3060] border border-yellow-400/50 rounded-lg px-2 py-1 text-sm font-black text-white uppercase focus:outline-none focus:border-yellow-400 w-full"
+                          />
+                        ) : (
+                          <h3 className="text-sm font-black text-white uppercase tracking-tight group-hover:text-yellow-400 transition-colors truncate">
+                            {col.name}
+                          </h3>
+                        )}
+                        <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase mt-0.5">
+                          {col.product_count} ITEM{col.product_count === 1 ? '' : 'S'}
+                        </span>
                       </div>
                     </div>
-                  ) : (
-                    <>
-                      <h3 className="text-xl font-bold text-foreground uppercase tracking-tight group-hover:text-primary transition-colors">{tag.name}</h3>
-                      <div className="mt-4 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest transition-colors">Ver Colección <ChevronRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" /></div>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button title="Editar nombre" onClick={(e) => { e.stopPropagation(); setEditingTag({id: tag.id, name: tag.name}); }} className="p-2 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground"><Edit2 className="w-4 h-4" /></button>
-                          <button title="Eliminar colección" onClick={(e) => { e.stopPropagation(); handleDeleteTags([tag.id]); }} className="p-2 hover:bg-primary/20 rounded-lg text-muted-foreground hover:text-primary"><Trash2 className="w-4 h-4" /></button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </Reorder.Item>
-              ))
-            )}
-          </Reorder.Group>
-        </div>
-      )}
 
-      {selectedTag && (
-        <div className="space-y-6">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setSelectedTag(null)} className="p-2 hover:bg-white/5 rounded-xl text-zinc-400 hover:text-white transition-all"><ArrowLeft className="w-6 h-6" /></button>
-            <div>
-              <div className="flex items-center gap-2"><Tag className="w-4 h-4 text-red-500" /><span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Colección Seleccionada</span></div>
-              <h3 className="text-2xl font-black text-white uppercase italic">{selectedTag.name}</h3>
+                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                      <button
+                        onClick={(e) => startRenaming(col, e)}
+                        className="p-1.5 text-gray-600 hover:text-yellow-400 hover:bg-yellow-400/10 rounded-lg transition-all"
+                        title="Renombrar"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleSelectCollection(col); }}
+                        className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg flex items-center gap-0.5 transition-all ${
+                          isSelected ? "bg-yellow-400 text-black" : "text-gray-400 group-hover:text-white bg-white/5"
+                        }`}
+                      >
+                        Ver <ChevronRight className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteCollection(col.id, col.name); }}
+                        className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                        title="Eliminar coleccion"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
-          <div className="bg-zinc-900/50 border border-white/5 rounded-3xl overflow-hidden backdrop-blur-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-white/5 bg-black/40">
-                    <th className="p-6 text-[10px] font-black text-zinc-500 uppercase tracking-widest">Producto</th>
-                    <th className="p-6 text-[10px] font-black text-zinc-500 uppercase tracking-widest">SKU</th>
-                    <th className="p-6 text-[10px] font-black text-zinc-500 uppercase tracking-widest text-right">Precio Base</th>
-                    <th className="p-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest text-right">Stock</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {loading ? (
-                    <tr><td colSpan={4} className="p-20 text-center text-zinc-500">Sincronizando assets...</td></tr>
-                  ) : products.length === 0 ? (
-                    <tr><td colSpan={4} className="p-20 text-center text-zinc-500">No hay productos en esta colección.</td></tr>
-                  ) : (
-                    products.map((p) => (
-                      <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="p-6"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-black/50 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">{p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : <ImageIcon className="w-4 h-4 text-zinc-600" />}</div><span className="text-sm font-bold text-white">{p.name}</span></div></td>
-                        <td className="p-6 text-sm text-zinc-400 font-mono">{p.sku || '---'}</td>
-                        <td className="p-6 text-sm font-mono text-white text-right">€{(p.base_price || 0).toFixed(2)}</td>
-                        <td className="p-6 text-right"><span className={cn("text-sm font-mono font-bold", (p.base_stock || 0) === 0 ? "text-red-500" : "text-emerald-500")}>{p.base_stock || 0}</span></td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
         </div>
-      )}
+
+        {/* COLUMNA DERECHA: SELECCIÓN DE PRODUCTOS */}
+        <div className="lg:col-span-7 bg-[#0a1628] border border-white/10 rounded-3xl p-5 md:p-6 flex flex-col gap-4 shadow-2xl min-h-[420px]">
+          {selectedCollection ? (
+            <>
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-white/10 pb-4">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-yellow-400 tracking-widest flex items-center gap-1">
+                    <Tag className="w-3 h-3" /> Coleccion activa
+                  </span>
+                  <h2 className="text-xl font-black uppercase text-white tracking-tight">{selectedCollection.name}</h2>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    {assignedProductIds.size} asignado(s) &middot; {products.length - assignedProductIds.size} sin asignar
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => { setBulkMode(b => !b); setBulkSelectedIds(new Set()); }}
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all border ${
+                      bulkMode ? 'bg-yellow-400 text-black border-yellow-400' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:border-white/20'
+                    }`}
+                  >
+                    <CheckSquare className="w-3 h-3" />
+                    {bulkMode ? 'Cancelar' : 'Seleccion'}
+                  </button>
+                  <div className="relative w-40">
+                    <Search className="w-3 h-3 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="BUSCAR..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full bg-[#030c1a] border border-white/10 rounded-xl pl-7 pr-6 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-yellow-400/50 uppercase"
+                    />
+                    {searchTerm && (
+                      <button onClick={() => setSearchTerm("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bulk action bar */}
+              {bulkMode && (
+                <div className="flex items-center justify-between bg-yellow-400/10 border border-yellow-400/30 rounded-xl px-4 py-2.5 gap-3">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={toggleSelectAll}
+                      className="flex items-center gap-2 text-[10px] font-black uppercase text-yellow-400 hover:text-yellow-300 transition-colors"
+                    >
+                      {bulkSelectedIds.size === assignedFiltered.length && assignedFiltered.length > 0
+                        ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />
+                      }
+                      {bulkSelectedIds.size === assignedFiltered.length && assignedFiltered.length > 0
+                        ? 'Deseleccionar todo' : 'Seleccionar todo'
+                      }
+                    </button>
+                    {bulkSelectedIds.size > 0 && (
+                      <span className="text-[10px] text-gray-400 font-bold">{bulkSelectedIds.size} seleccionado(s)</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleBulkRemove}
+                    disabled={bulkSelectedIds.size === 0}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 hover:text-red-300 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <AlertTriangle className="w-3 h-3" /> Quitar de coleccion
+                  </button>
+                </div>
+              )}
+
+              {/* Productos asignados */}
+              {assignedFiltered.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-px flex-1 bg-yellow-400/20" />
+                    <span className="text-[9px] font-black uppercase tracking-widest text-yellow-400/80 px-2 whitespace-nowrap">En esta coleccion ({assignedFiltered.length})</span>
+                    <div className="h-px flex-1 bg-yellow-400/20" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
+                    {assignedFiltered.map((prod) => {
+                      const isBulkSelected = bulkSelectedIds.has(prod.id);
+                      return (
+                        <div
+                          key={prod.id}
+                          onClick={() => bulkMode ? toggleBulkProduct(prod.id) : toggleProductAssignment(prod.id)}
+                          className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center gap-3 group ${
+                            bulkMode && isBulkSelected ? "bg-yellow-400/10 border-yellow-400" : "bg-[#0e2744] border-yellow-400/50 hover:border-yellow-400 shadow-sm"
+                          }`}
+                        >
+                          {bulkMode && (
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                              isBulkSelected ? 'bg-yellow-400 border-yellow-400' : 'border-white/30'
+                            }`}>
+                              {isBulkSelected && <Check className="w-2.5 h-2.5 text-black stroke-[3]" />}
+                            </div>
+                          )}
+                          <div className="w-10 h-10 bg-[#0a1628] rounded-xl border border-white/10 overflow-hidden shrink-0 flex items-center justify-center p-1">
+                            {prod.image_url ? <img src={prod.image_url} alt={prod.name} className="w-full h-full object-contain" /> : <Package className="w-4 h-4 text-gray-600" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-xs font-bold text-white truncate group-hover:text-yellow-300 transition-colors">{prod.name}</h4>
+                            <span className="text-[10px] font-extrabold text-yellow-400">{prod.price.toFixed(2)}EUR</span>
+                          </div>
+                          {!bulkMode && <div className="w-5 h-5 rounded-full bg-yellow-400 flex items-center justify-center shrink-0"><Check className="w-3 h-3 text-black stroke-[3]" /></div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Productos sin asignar */}
+              {unassignedFiltered.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-px flex-1 bg-white/5" />
+                    <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 px-2 whitespace-nowrap">Sin asignar ({unassignedFiltered.length})</span>
+                    <div className="h-px flex-1 bg-white/5" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[220px] overflow-y-auto pr-1">
+                    {unassignedFiltered.map((prod) => (
+                      <div
+                        key={prod.id}
+                        onClick={() => !bulkMode && toggleProductAssignment(prod.id)}
+                        className={`p-3 rounded-2xl border transition-all flex items-center gap-3 group opacity-50 hover:opacity-100 ${
+                          bulkMode ? 'cursor-default' : 'cursor-pointer'
+                        } bg-[#030c1a]/60 border-white/5 hover:border-white/20`}
+                      >
+                        <div className="w-10 h-10 bg-[#0a1628] rounded-xl border border-white/10 overflow-hidden shrink-0 flex items-center justify-center p-1">
+                          {prod.image_url ? <img src={prod.image_url} alt={prod.name} className="w-full h-full object-contain" /> : <Package className="w-4 h-4 text-gray-600" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-bold text-white truncate group-hover:text-yellow-300 transition-colors">{prod.name}</h4>
+                          <span className="text-[10px] font-extrabold text-yellow-400">{prod.price.toFixed(2)}EUR</span>
+                        </div>
+                        {!bulkMode && (
+                          <div className="w-5 h-5 rounded-full border border-white/20 group-hover:border-white/50 shrink-0 flex items-center justify-center">
+                            <Plus className="w-3 h-3 text-white/30 group-hover:text-white/80 transition-colors" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {filteredProducts.length === 0 && (
+                <div className="py-16 flex flex-col items-center justify-center text-center text-gray-500">
+                  <Package className="w-10 h-10 mb-2 opacity-20" />
+                  <p className="font-bold text-xs uppercase tracking-widest max-w-xs">
+                    {searchTerm ? `Sin resultados para "${searchTerm}"` : "No hay productos registrados en el inventario"}
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="py-24 flex flex-col items-center justify-center text-center text-gray-500">
+              <Package className="w-12 h-12 mb-3 opacity-20" />
+              <p className="font-bold text-xs uppercase tracking-widest max-w-xs">
+                SELECCIONA UNA COLECCION DE LA IZQUIERDA PARA GESTIONARLE SUS PRODUCTOS
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
-};
+}

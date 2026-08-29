@@ -64,9 +64,10 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-    },
+    // NOTA DE SEGURIDAD: No inyectar claves de API privadas (Gemini, Stripe secret, etc.)
+    // en el bundle del cliente mediante define{}.
+    // Las llamadas a IA deben realizarse a través de una Edge Function o el servidor Express.
+    define: {},
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

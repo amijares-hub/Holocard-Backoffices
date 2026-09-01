@@ -62,6 +62,7 @@ const normalizeText = (text: string = "") => {
 export function CollectionsManager() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [pivots, setPivots] = useState<any[]>([]);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [assignedProductIds, setAssignedProductIds] = useState<Set<string>>(new Set());
   
@@ -70,34 +71,88 @@ export function CollectionsManager() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Rename state
+  // Estado de renombrado
   const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
   const [editingCollectionName, setEditingCollectionName] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  // Bulk action state
+  // Estado de selección masiva
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+
+  const updateAssignedProductIds = (
+    collection: Collection, 
+    prodsList: Product[] = products, 
+    pivotList: any[] = pivots
+  ) => {
+    setSelectedCollection(collection);
+    setBulkMode(false);
+    setBulkSelectedIds(new Set());
+
+    const assignedIds = new Set<string>();
+    const colNorm = normalizeText(collection.name);
+
+    // 1. Coincidencia directa por tabla pivote
+    pivotList.forEach((pc: any) => {
+      const cId = String(pc.tag_id || pc.collection_id || pc.tagId || pc.collectionId);
+      const pId = String(pc.product_id || pc.productId);
+      if (cId === String(collection.id)) {
+        assignedIds.add(pId);
+      }
+    });
+
+    // 2. Coincidencia por texto en propiedades de productos
+    prodsList.forEach(p => {
+      const pDataStr = normalizeText(`${p.collection} ${JSON.stringify(p.tags)}`);
+      if (pDataStr.includes(colNorm)) {
+        assignedIds.add(p.id);
+      }
+    });
+
+    setAssignedProductIds(assignedIds);
+  };
 
   const fetchData = async () => {
     setLoading(true);
     try {
       if (!supabase) return;
 
-      const { data: colsData } = await supabase
-        .from('collections')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // 1. Cargar colecciones unificando registros de 'tags' y 'collections'
+      const [tagsRes, colsRes] = await Promise.all([
+        supabase.from('tags').select('*').then(r => r.error ? { data: [] } : r),
+        supabase.from('collections').select('*').then(r => r.error ? { data: [] } : r)
+      ]);
 
-      const { data: prodsData } = await supabase
-        .from('products')
-        .select('*');
+      const rawCols = [...(tagsRes.data || []), ...(colsRes.data || [])];
+      const collectionsMap = new Map<string, Collection>();
+      const nameSet = new Set<string>();
 
-      const { data: pivotData } = await supabase
-        .from('product_collections')
-        .select('*');
+      rawCols.forEach((c: any) => {
+        const id = String(c.id);
+        const name = String(c.name || c.nombre || c.title || "").trim().toUpperCase();
+        if (id && name && !nameSet.has(name)) {
+          nameSet.add(name);
+          collectionsMap.set(id, {
+            id,
+            name,
+            created_at: c.created_at,
+            product_count: 0
+          });
+        }
+      });
 
-      const formattedProds: Product[] = (prodsData || []).map((p: any) => {
+      // 2. Cargar productos y relaciones pivote
+      const [prodsDataRes, pivotTagsRes, pivotColsRes] = await Promise.all([
+        supabase.from('products').select('*'),
+        supabase.from('product_tags').select('*').then(r => r.error ? { data: [] } : r),
+        supabase.from('product_collections').select('*').then(r => r.error ? { data: [] } : r)
+      ]);
+
+      const prodsData = prodsDataRes.data || [];
+      const rawPivotData = [...(pivotTagsRes.data || []), ...(pivotColsRes.data || [])];
+      setPivots(rawPivotData);
+
+      const formattedProds: Product[] = prodsData.map((p: any) => {
         let rawImg = findValueByKeywords(p, ["imag", "img", "portad", "thumb", "foto", "pic", "image_url"]);
         let finalImg = rawImg || "";
         if (Array.isArray(finalImg)) finalImg = finalImg[0];
@@ -116,47 +171,16 @@ export function CollectionsManager() {
         };
       });
 
-      const tagsFromInventory = new Set<string>();
-      formattedProds.forEach(p => {
-        let raw = p.tags;
-        if (Array.isArray(raw)) {
-          raw.forEach(t => typeof t === 'string' && t.trim() && tagsFromInventory.add(t.trim().toUpperCase()));
-        } else if (typeof raw === 'string') {
-          raw.split(',').forEach(t => t.trim() && tagsFromInventory.add(t.trim().toUpperCase()));
-        }
-      });
-
-      const collectionsMap = new Map<string, Collection>();
-
-      (colsData || []).forEach((c: any) => {
-        const cName = String(c.name || c.nombre || "").toUpperCase();
-        if (cName) {
-          collectionsMap.set(cName, {
-            id: String(c.id),
-            name: cName,
-            created_at: c.created_at,
-            product_count: 0
-          });
-        }
-      });
-
-      tagsFromInventory.forEach(tag => {
-        if (tag && !collectionsMap.has(tag)) {
-          collectionsMap.set(tag, {
-            id: `tag-${tag.toLowerCase()}`,
-            name: tag,
-            product_count: 0
-          });
-        }
-      });
-
       const allCollections = Array.from(collectionsMap.values());
 
       const pivotCounts = new Map<string, Set<string>>();
-      (pivotData || []).forEach((pc: any) => {
-        const cId = String(pc.collection_id);
-        if (!pivotCounts.has(cId)) pivotCounts.set(cId, new Set());
-        pivotCounts.get(cId)!.add(String(pc.product_id));
+      rawPivotData.forEach((pc: any) => {
+        const cId = String(pc.tag_id || pc.collection_id || pc.tagId || pc.collectionId);
+        const pId = String(pc.product_id || pc.productId);
+        if (cId && pId) {
+          if (!pivotCounts.has(cId)) pivotCounts.set(cId, new Set());
+          pivotCounts.get(cId)!.add(pId);
+        }
       });
 
       allCollections.forEach(col => {
@@ -172,11 +196,18 @@ export function CollectionsManager() {
       setCollections(allCollections);
       setProducts(formattedProds);
 
-      if (allCollections.length > 0 && !selectedCollection) {
-        handleSelectCollection(allCollections[0], formattedProds);
+      const targetCol = selectedCollection && allCollections.some(c => c.id === selectedCollection.id)
+        ? allCollections.find(c => c.id === selectedCollection.id)!
+        : allCollections[0] || null;
+
+      if (targetCol) {
+        updateAssignedProductIds(targetCol, formattedProds, rawPivotData);
+      } else {
+        setSelectedCollection(null);
+        setAssignedProductIds(new Set());
       }
     } catch (err) {
-      console.error("Error sincronizando colecciones con inventario:", err);
+      console.error("Error sincronizando colecciones:", err);
     } finally {
       setLoading(false);
     }
@@ -190,14 +221,15 @@ export function CollectionsManager() {
     const channel = supabase
       .channel('realtime-collections-manager')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tags' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'collections' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_tags' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'product_collections' }, () => fetchData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Focus rename input on edit start
   useEffect(() => {
     if (editingCollectionId && renameInputRef.current) {
       renameInputRef.current.focus();
@@ -205,34 +237,10 @@ export function CollectionsManager() {
     }
   }, [editingCollectionId]);
 
-  const handleSelectCollection = async (collection: Collection, prodsList = products) => {
-    setSelectedCollection(collection);
-    setBulkMode(false);
-    setBulkSelectedIds(new Set());
-    const assignedIds = new Set<string>();
-    const colNorm = normalizeText(collection.name);
-
-    prodsList.forEach(p => {
-      const pDataStr = normalizeText(`${p.collection} ${JSON.stringify(p.tags)}`);
-      if (pDataStr.includes(colNorm)) assignedIds.add(p.id);
-    });
-
-    try {
-      if (supabase && !collection.id.startsWith('tag-')) {
-        const { data } = await supabase
-          .from('product_collections')
-          .select('product_id')
-          .eq('collection_id', collection.id);
-        data?.forEach((item: any) => assignedIds.add(String(item.product_id)));
-      }
-    } catch (err) {
-      console.warn("Lectura relacional:", err);
-    }
-
-    setAssignedProductIds(assignedIds);
+  const handleSelectCollection = (collection: Collection) => {
+    updateAssignedProductIds(collection, products, pivots);
   };
 
-  // ─── RENOMBRAR COLECCION ───
   const startRenaming = (col: Collection, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingCollectionId(col.id);
@@ -247,31 +255,25 @@ export function CollectionsManager() {
       setEditingCollectionId(null);
       return;
     }
-    const oldName = oldCol.name;
+
     setCollections(prev => prev.map(c => c.id === editingCollectionId ? { ...c, name: newName } : c));
     if (selectedCollection?.id === editingCollectionId) {
       setSelectedCollection(prev => prev ? { ...prev, name: newName } : null);
     }
     setEditingCollectionId(null);
+
     try {
       if (supabase && !editingCollectionId.startsWith('tag-') && !editingCollectionId.startsWith('col-')) {
-        await supabase.from('collections').update({ name: newName }).eq('id', editingCollectionId);
-        const affectedProds = products.filter(p => {
-          const arr = Array.isArray(p.tags) ? p.tags : typeof p.tags === 'string' ? p.tags.split(',').map(t => t.trim()) : [];
-          return arr.some(t => t.toUpperCase() === oldName);
-        });
-        for (const prod of affectedProds) {
-          let arr = Array.isArray(prod.tags) ? [...prod.tags] : typeof prod.tags === 'string' ? prod.tags.split(',').map(t => t.trim()) : [];
-          arr = arr.map(t => t.toUpperCase() === oldName ? newName : t);
-          // await supabase.from('products').update({ tags: arr }).eq('id', prod.id);
-        }
+        await Promise.all([
+          supabase.from('tags').update({ name: newName }).eq('id', editingCollectionId),
+          supabase.from('collections').update({ name: newName }).eq('id', editingCollectionId)
+        ]);
       }
     } catch (err) {
-      console.error("Error renombrando coleccion:", err);
+      console.error("Error renombrando colección:", err);
     }
   };
 
-  // ─── BULK ACTIONS ───
   const toggleBulkProduct = (productId: string) => {
     setBulkSelectedIds(prev => {
       const next = new Set(prev);
@@ -288,32 +290,29 @@ export function CollectionsManager() {
 
   const handleBulkRemove = async () => {
     if (!selectedCollection || bulkSelectedIds.size === 0) return;
-    if (!confirm(`Quitar ${bulkSelectedIds.size} producto(s) de "${selectedCollection.name}"?`)) return;
+    if (!confirm(`¿Quitar ${bulkSelectedIds.size} producto(s) de "${selectedCollection.name}"?`)) return;
+
     const idsToRemove = Array.from(bulkSelectedIds);
     const newAssigned = new Set(assignedProductIds);
     idsToRemove.forEach(id => newAssigned.delete(id));
+
     setAssignedProductIds(newAssigned);
     setCollections(prev => prev.map(c => c.id === selectedCollection.id ? { ...c, product_count: newAssigned.size } : c));
     setBulkSelectedIds(new Set());
     setBulkMode(false);
+
     try {
       if (supabase) {
-        if (!selectedCollection.id.startsWith('tag-') && !selectedCollection.id.startsWith('col-')) {
-          for (const pid of idsToRemove) {
-            await supabase.from('product_collections').delete().eq('collection_id', selectedCollection.id).eq('product_id', pid);
-          }
-        }
         for (const pid of idsToRemove) {
-          const prod = products.find(p => p.id === pid);
-          if (prod) {
-            let arr = Array.isArray(prod.tags) ? [...prod.tags] : typeof prod.tags === 'string' ? prod.tags.split(',').map(t => t.trim()) : [];
-            arr = arr.filter(t => t.toUpperCase() !== selectedCollection.name);
-            prod.tags = arr;
-            // await supabase.from('products').update({ tags: arr }).eq('id', pid);
-          }
+          await Promise.all([
+            supabase.from('product_tags').delete().eq('product_id', pid).or(`tag_id.eq.${selectedCollection.id},collection_id.eq.${selectedCollection.id}`),
+            supabase.from('product_collections').delete().eq('product_id', pid).or(`collection_id.eq.${selectedCollection.id},tag_id.eq.${selectedCollection.id}`)
+          ]);
         }
       }
-    } catch (err) { console.error("Error en bulk remove:", err); }
+    } catch (err) { 
+      console.error("Error en bulk remove:", err); 
+    }
   };
 
   const handleCreateCollection = async (e: React.FormEvent) => {
@@ -323,60 +322,87 @@ export function CollectionsManager() {
 
     setIsCollectionCreating(true);
 
-    const tempId = `col-${Date.now()}`;
-    const newColObj: Collection = {
-      id: tempId,
-      name: cleanName,
-      product_count: 0
-    };
-
-    setCollections(prev => [newColObj, ...prev]);
-    setSelectedCollection(newColObj);
-    setAssignedProductIds(new Set());
-    setNewCollectionName("");
-
     try {
       if (supabase) {
-        const { data } = await supabase
-          .from('collections')
+        const { data: tagData } = await supabase
+          .from('tags')
           .insert([{ name: cleanName }])
           .select()
           .maybeSingle();
 
-        if (data) {
+        await supabase.from('collections').insert([{ name: cleanName }]);
+
+        if (tagData) {
           const realCol: Collection = {
-            id: String(data.id),
-            name: String(data.name).toUpperCase(),
+            id: String(tagData.id),
+            name: String(tagData.name).toUpperCase(),
             product_count: 0
           };
 
-          setCollections(prev => prev.map(c => c.id === tempId ? realCol : c));
+          setCollections(prev => [realCol, ...prev]);
           setSelectedCollection(realCol);
+          setAssignedProductIds(new Set());
         }
       }
     } catch (err) {
-      console.warn("Creación local activa:", err);
+      console.warn("Error creando colección:", err);
     } finally {
+      setNewCollectionName("");
       setIsCollectionCreating(false);
+      fetchData();
     }
   };
 
   const handleDeleteCollection = async (id: string, name: string) => {
-    if (!confirm(`¿Estás seguro de eliminar la colección "${name}"?`)) return;
+    if (!confirm(`¿Estás seguro de eliminar permanentemente la colección "${name}"?`)) return;
 
-    setCollections(prev => prev.filter(c => c.id !== id));
+    const cleanName = name.trim().toUpperCase();
 
-    if (selectedCollection?.id === id) {
+    setCollections(prev => prev.filter(c => c.id !== id && c.name.toUpperCase() !== cleanName));
+
+    if (selectedCollection?.id === id || selectedCollection?.name.toUpperCase() === cleanName) {
       setSelectedCollection(null);
       setAssignedProductIds(new Set());
     }
 
     try {
-      if (supabase && !id.startsWith('col-') && !id.startsWith('tag-')) {
-        await supabase.from('collections').delete().eq('id', id);
+      if (supabase) {
+        const [tRes, cRes] = await Promise.all([
+          supabase.from('tags').select('id').ilike('name', cleanName),
+          supabase.from('collections').select('id').ilike('name', cleanName)
+        ]);
+
+        const allIds = new Set<string>([id]);
+        (tRes.data || []).forEach((r: any) => allIds.add(String(r.id)));
+        (cRes.data || []).forEach((r: any) => allIds.add(String(r.id)));
+
+        const idsArray = Array.from(allIds);
+
+        for (const targetId of idsArray) {
+          await Promise.all([
+            supabase.from('product_tags').delete().or(`tag_id.eq.${targetId},collection_id.eq.${targetId}`),
+            supabase.from('product_collections').delete().or(`collection_id.eq.${targetId},tag_id.eq.${targetId}`)
+          ]);
+        }
+
+        for (const targetId of idsArray) {
+          await Promise.all([
+            supabase.from('tags').delete().eq('id', targetId),
+            supabase.from('collections').delete().eq('id', targetId)
+          ]);
+        }
+
+        await Promise.all([
+          supabase.from('tags').delete().ilike('name', cleanName),
+          supabase.from('collections').delete().ilike('name', cleanName)
+        ]);
+
+        await supabase.from('products').update({ collection: null }).ilike('collection', cleanName);
       }
     } catch (err) {
-      console.error("Error al eliminar en backend:", err);
+      console.error("Error al eliminar la colección en la base de datos:", err);
+    } finally {
+      await fetchData();
     }
   };
 
@@ -386,30 +412,49 @@ export function CollectionsManager() {
       if (assignedProductIds.has(productId)) toggleBulkProduct(productId);
       return;
     }
+
     const newAssigned = new Set(assignedProductIds);
     const isCurrentlyAssigned = newAssigned.has(productId);
-    if (isCurrentlyAssigned) newAssigned.delete(productId); else newAssigned.add(productId);
+
+    if (isCurrentlyAssigned) {
+      newAssigned.delete(productId);
+    } else {
+      newAssigned.add(productId);
+    }
+
     setAssignedProductIds(newAssigned);
     setCollections(prev => prev.map(c => c.id === selectedCollection.id ? { ...c, product_count: newAssigned.size } : c));
+
+    // Actualizar pivots locales
+    let updatedPivots = [...pivots];
+    if (isCurrentlyAssigned) {
+      updatedPivots = updatedPivots.filter(pc => {
+        const cId = String(pc.tag_id || pc.collection_id || pc.tagId || pc.collectionId);
+        const pId = String(pc.product_id || pc.productId);
+        return !(cId === selectedCollection.id && pId === productId);
+      });
+    } else {
+      updatedPivots.push({ tag_id: selectedCollection.id, collection_id: selectedCollection.id, product_id: productId });
+    }
+    setPivots(updatedPivots);
+
     try {
       if (supabase) {
-        if (!selectedCollection.id.startsWith('tag-') && !selectedCollection.id.startsWith('col-')) {
-          if (isCurrentlyAssigned) {
-            await supabase.from('product_collections').delete().eq('collection_id', selectedCollection.id).eq('product_id', productId);
-          } else {
-            await supabase.from('product_collections').insert([{ collection_id: selectedCollection.id, product_id: productId }]);
-          }
-        }
-        const prod = products.find(p => p.id === productId);
-        if (prod) {
-          let arr = Array.isArray(prod.tags) ? [...prod.tags] : typeof prod.tags === 'string' ? prod.tags.split(',').map(t => t.trim()) : [];
-          if (isCurrentlyAssigned) arr = arr.filter(t => t.toUpperCase() !== selectedCollection.name);
-          else if (!arr.some(t => t.toUpperCase() === selectedCollection.name)) arr.push(selectedCollection.name);
-          prod.tags = arr;
-          // await supabase.from('products').update({ tags: arr }).eq('id', productId);
+        if (isCurrentlyAssigned) {
+          await Promise.all([
+            supabase.from('product_tags').delete().eq('product_id', productId).eq('tag_id', selectedCollection.id),
+            supabase.from('product_collections').delete().eq('product_id', productId).eq('collection_id', selectedCollection.id)
+          ]);
+        } else {
+          await Promise.all([
+            supabase.from('product_tags').insert([{ tag_id: selectedCollection.id, product_id: productId }]),
+            supabase.from('product_collections').insert([{ collection_id: selectedCollection.id, product_id: productId }])
+          ]);
         }
       }
-    } catch (err) { console.warn("Sincronizacion realizada:", err); }
+    } catch (err) { 
+      console.warn("Sincronización de asignación ejecutada:", err); 
+    }
   };
 
   const filteredProducts = products.filter(p => {
@@ -422,7 +467,7 @@ export function CollectionsManager() {
   const unassignedFiltered = filteredProducts.filter(p => !assignedProductIds.has(p.id));
 
   return (
-    <div className="w-full min-h-screen bg-[#060c17] text-white p-4 md:p-8 flex flex-col gap-6">
+    <div className="w-full min-h-screen bg-[#060c17] text-white p-4 md:p-8 flex flex-col gap-6 font-sans">
       
       {/* HEADER PRINCIPAL */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-6">
@@ -467,7 +512,7 @@ export function CollectionsManager() {
       {/* GRID DOS COLUMNAS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* COLUMNA IZQUIERDA: LISTA DE COLECCIONES Y ETIQUETAS */}
+        {/* COLUMNA IZQUIERDA: LISTA DE COLECCIONES */}
         <div className="lg:col-span-5 flex flex-col gap-3">
           <h2 className="text-xs font-black uppercase tracking-widest text-gray-400 px-1 flex items-center gap-2">
             <Layers className="w-4 h-4 text-yellow-400" /> Colecciones y Etiquetas ({collections.length})
@@ -541,7 +586,7 @@ export function CollectionsManager() {
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteCollection(col.id, col.name); }}
                         className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                        title="Eliminar coleccion"
+                        title="Eliminar colección"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -561,7 +606,7 @@ export function CollectionsManager() {
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-white/10 pb-4">
                 <div>
                   <span className="text-[10px] font-black uppercase text-yellow-400 tracking-widest flex items-center gap-1">
-                    <Tag className="w-3 h-3" /> Coleccion activa
+                    <Tag className="w-3 h-3" /> Colección activa
                   </span>
                   <h2 className="text-xl font-black uppercase text-white tracking-tight">{selectedCollection.name}</h2>
                   <p className="text-[10px] text-gray-500 mt-0.5">
@@ -576,7 +621,7 @@ export function CollectionsManager() {
                     }`}
                   >
                     <CheckSquare className="w-3 h-3" />
-                    {bulkMode ? 'Cancelar' : 'Seleccion'}
+                    {bulkMode ? 'Cancelar' : 'Selección'}
                   </button>
                   <div className="relative w-40">
                     <Search className="w-3 h-3 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -596,7 +641,7 @@ export function CollectionsManager() {
                 </div>
               </div>
 
-              {/* Bulk action bar */}
+              {/* Barra de acción masiva */}
               {bulkMode && (
                 <div className="flex items-center justify-between bg-yellow-400/10 border border-yellow-400/30 rounded-xl px-4 py-2.5 gap-3">
                   <div className="flex items-center gap-3">
@@ -620,7 +665,7 @@ export function CollectionsManager() {
                     disabled={bulkSelectedIds.size === 0}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 hover:text-red-300 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                   >
-                    <AlertTriangle className="w-3 h-3" /> Quitar de coleccion
+                    <AlertTriangle className="w-3 h-3" /> Quitar de colección
                   </button>
                 </div>
               )}
@@ -630,7 +675,7 @@ export function CollectionsManager() {
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-2">
                     <div className="h-px flex-1 bg-yellow-400/20" />
-                    <span className="text-[9px] font-black uppercase tracking-widest text-yellow-400/80 px-2 whitespace-nowrap">En esta coleccion ({assignedFiltered.length})</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-yellow-400/80 px-2 whitespace-nowrap">En esta colección ({assignedFiltered.length})</span>
                     <div className="h-px flex-1 bg-yellow-400/20" />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
@@ -714,7 +759,7 @@ export function CollectionsManager() {
             <div className="py-24 flex flex-col items-center justify-center text-center text-gray-500">
               <Package className="w-12 h-12 mb-3 opacity-20" />
               <p className="font-bold text-xs uppercase tracking-widest max-w-xs">
-                SELECCIONA UNA COLECCION DE LA IZQUIERDA PARA GESTIONARLE SUS PRODUCTOS
+                SELECCIONA UNA COLECCIÓN DE LA IZQUIERDA PARA GESTIONARLE SUS PRODUCTOS
               </p>
             </div>
           )}

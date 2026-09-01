@@ -1,25 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 import { 
   Users, Crosshair, Search, ShieldAlert, Zap, Gift, Activity, 
-  ChevronRight, X, Shield, Lock, Star, AlertTriangle, Terminal,
-  Database, RefreshCw, User, Hexagon, Package
+  X, Shield, Star, Terminal, Database, RefreshCw, User, Hexagon,
+  Package, History, Mail, ShoppingBag, CheckCircle2, UserCheck
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface UserProfileWithStats {
   id: string;
   email: string;
+  full_name: string;
   level: number;
   exp: number;
   battle_pass_points: number;
   pokeballs: number;
   tier: string;
+  role: 'admin' | 'client';
   total_spent: number;
+  total_orders: number;
   last_activity: string;
   captured_count: number;
   shadow_notes?: string;
+  phone?: string;
+  address_street?: string;
+  address_city?: string;
+  address_zip?: string;
+  address_country?: string;
   is_at_risk?: boolean;
   archetype?: 'Whale' | 'Hunter' | 'Collector' | 'Newbie' | 'Sniper';
 }
@@ -40,19 +48,20 @@ export default function UsersEngine() {
   const [vaultLoading, setVaultLoading] = useState(false);
   const [liveLogs, setLiveLogs] = useState<ActivityLog[]>([]);
   
-  // Filters
-  const [filterType, setFilterType] = useState<'all' | 'whales' | 'dormant' | 'active_sub'>('all');
+  // Filtros
+  const [filterType, setFilterType] = useState<'all' | 'whales' | 'dormant' | 'active_sub' | 'admins'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Editing State
+  // Edición
   const [editLevel, setEditLevel] = useState(1);
   const [editExp, setEditExp] = useState(0);
   const [editTier, setEditTier] = useState('entrenador');
+  const [editRole, setEditRole] = useState<'admin' | 'client'>('client');
   const [editPokeballs, setEditPokeballs] = useState(0);
   const [editShadowNotes, setEditShadowNotes] = useState('');
   const [isConfirmingEdit, setIsConfirmingEdit] = useState(false);
 
-  // God Console State
+  // Consola / Pestañas de detalle
   const [activeConsoleTab, setActiveConsoleTab] = useState<'mainframe' | 'identity' | 'transactions'>('mainframe');
   const [editPhone, setEditPhone] = useState('');
   const [editStreet, setEditStreet] = useState('');
@@ -62,12 +71,11 @@ export default function UsersEngine() {
   const [userOrders, setUserOrders] = useState<any[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
-  // Ultimate Gift Spawner (Airdrop Pro) State
+  // Regalos / Airdrop
   const [isConfirmingGift, setIsConfirmingGift] = useState(false);
   const [giftTier, setGiftTier] = useState('All');
   const [giftResourceType, setGiftResourceType] = useState<'exp' | 'pokeballs' | 'bp' | 'sku'>('pokeballs');
   const [giftAmount, setGiftAmount] = useState(10);
-  const [giftSKU, setGiftSKU] = useState('');
   const [giftMinLevel, setGiftMinLevel] = useState(0);
   const [giftMaxLevel, setGiftMaxLevel] = useState(100);
   const [giftMinLTV, setGiftMinLTV] = useState(0);
@@ -75,83 +83,185 @@ export default function UsersEngine() {
   const [giftMessage, setGiftMessage] = useState('');
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployProgress, setDeployProgress] = useState(0);
-  const [holdProgress, setHoldProgress] = useState(0);
 
   useEffect(() => {
     fetchUsers();
-    setupLogsMock();
+    fetchRealLogs();
   }, []);
 
   useEffect(() => {
     applyFilters();
   }, [users, filterType, searchQuery]);
 
+  // Carga de usuarios reales desde Supabase
   const fetchUsers = async () => {
     setLoading(true);
-    const { data: profiles, error } = await supabase
-      .from('user_profiles')
-      .select('*');
-
-    if (error) {
-      console.error('Error fetching profiles:', error);
-      setUsers([]);
-      setLoading(false);
-      return;
-    }
-
-    // Map profiles to our local interface
-    const mappedUsers: UserProfileWithStats[] = (profiles || []).map(p => {
-      const lastActivityDate = new Date(p.updated_at || Date.now());
-      const daysSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24);
+    
+    try {
+      let profiles: any[] = [];
       
-      // CRM Logic: Predictive Churn (At Risk)
-      // High frequency users (Whales/Tiered) are at risk if inactive > 7 days
-      const isAtRisk = daysSinceActivity > 10 || (p.tier !== 'Entrenador' && daysSinceActivity > 7);
+      // Consultar tabla de perfiles de la base de datos
+      const { data: pData, error: pError } = await supabase.from('profiles').select('*');
+      if (!pError && pData) {
+        profiles = pData;
+      } else {
+        const { data: fallbackProfiles } = await supabase.from('user_profiles').select('*');
+        if (fallbackProfiles) profiles = fallbackProfiles;
+      }
 
-      // Archetype Logic
-      let archetype: any = 'Newbie';
-      if (p.total_spent > 500) archetype = 'Whale';
-      else if (p.captured_count > 50) archetype = 'Collector';
-      else if (p.captured_count > 20) archetype = 'Hunter';
-      else if (p.total_spent > 0 && p.level > 10) archetype = 'Sniper';
+      // Consultar la tabla de pedidos para LTV y recuento de compras
+      const { data: orders } = await supabase.from('orders').select('user_id, total_amount, status');
+      const userOrderStats = new Map<string, { count: number; spent: number }>();
 
-      return {
-        id: p.id,
-        email: p.email || `user_${p.id.substring(0,5)}@holocard.io`,
-        level: p.level || 1,
-        exp: p.points || 0,
-        battle_pass_points: p.points || 0,
-        pokeballs: p.pokeballs || 0,
-        tier: p.tier || 'Entrenador',
-        total_spent: p.total_spent || 0,
-        last_activity: lastActivityDate.toISOString(),
-        captured_count: p.captured_count || 0,
-        shadow_notes: p.shadow_notes || '',
-        is_at_risk: isAtRisk,
-        archetype: archetype
-      };
-    });
+      (orders || []).forEach(o => {
+        if (!o.user_id) return;
+        const cur = userOrderStats.get(o.user_id) || { count: 0, spent: 0 };
+        userOrderStats.set(o.user_id, {
+          count: cur.count + 1,
+          spent: cur.spent + (Number(o.total_amount) || 0)
+        });
+      });
 
-    setUsers(mappedUsers);
-    setLoading(false);
+      // Mapeo con los datos reales
+      const mappedUsers: UserProfileWithStats[] = profiles.map(p => {
+        const stats = userOrderStats.get(p.id) || { count: 0, spent: 0 };
+        const computedSpent = (p.total_spent && Number(p.total_spent) > 0) ? Number(p.total_spent) : stats.spent;
+        const lastActivityDate = new Date(p.updated_at || p.created_at || Date.now());
+        const daysSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24);
+
+        const isAtRisk = daysSinceActivity > 10 || (p.tier && p.tier !== 'Entrenador' && daysSinceActivity > 7);
+
+        let archetype: any = 'Newbie';
+        if (computedSpent > 500) archetype = 'Whale';
+        else if ((p.captured_count || 0) > 50) archetype = 'Collector';
+        else if ((p.captured_count || 0) > 20) archetype = 'Hunter';
+        else if (computedSpent > 0 && (p.level || 1) > 10) archetype = 'Sniper';
+
+        const displayEmail = p.email || p.user_metadata?.email || `id_${p.id.substring(0, 8)}`;
+        const displayName = p.full_name || p.nombre || p.name || p.user_metadata?.full_name || displayEmail.split('@')[0];
+
+        return {
+          id: p.id,
+          email: displayEmail,
+          full_name: displayName,
+          level: p.level || 1,
+          exp: p.points || p.exp || 0,
+          battle_pass_points: p.battle_pass_points || p.points || 0,
+          pokeballs: p.pokeballs || 0,
+          tier: p.tier || 'Entrenador',
+          role: p.role === 'admin' ? 'admin' : 'client',
+          total_spent: computedSpent,
+          total_orders: stats.count,
+          last_activity: lastActivityDate.toISOString(),
+          captured_count: p.captured_count || 0,
+          shadow_notes: p.shadow_notes || '',
+          phone: p.phone || p.telefono || p.contact_phone || '',
+          address_street: p.address_street || p.direccion || '',
+          address_city: p.address_city || p.ciudad || '',
+          address_zip: p.address_zip || p.cp || '',
+          address_country: p.address_country || p.pais || 'ESP',
+          is_at_risk: isAtRisk,
+          archetype: archetype
+        };
+      });
+
+      setUsers(mappedUsers);
+    } catch (err: any) {
+      console.error('Error al cargar usuarios de Supabase:', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Carga de logs reales basados en actividad de pedidos y registros reales
+  const fetchRealLogs = async () => {
+    try {
+      const logsList: ActivityLog[] = [];
+
+      // Obtener últimos pedidos
+      const { data: recentOrders } = await supabase
+        .from('orders')
+        .select('id, total_amount, created_at, user_id')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      (recentOrders || []).forEach(o => {
+        logsList.push({
+          id: `ord_${o.id}`,
+          timestamp: o.created_at || new Date().toISOString(),
+          message: `Pedido #${String(o.id).substring(0, 6)} completado por ${Number(o.total_amount).toFixed(2)}€`,
+          type: 'purchase'
+        });
+      });
+
+      // Obtener últimos registros de usuarios
+      const { data: recentUsers } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, created_at')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      (recentUsers || []).forEach(u => {
+        logsList.push({
+          id: `usr_${u.id}`,
+          timestamp: u.created_at || new Date().toISOString(),
+          message: `Nuevo usuario registrado: ${u.full_name || u.email || u.id.substring(0, 8)}`,
+          type: 'system'
+        });
+      });
+
+      // Ordenar por fecha descendente
+      logsList.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+      if (logsList.length === 0) {
+        logsList.push({
+          id: 'init',
+          timestamp: new Date().toISOString(),
+          message: 'Sistema listo. Conectado a Supabase en tiempo real.',
+          type: 'system'
+        });
+      }
+
+      setLiveLogs(logsList);
+    } catch (e) {
+      console.warn('Error al cargar el historial de eventos reales:', e);
+    }
+  };
+
+  const toggleUserRole = async (userId: string, currentRole: 'admin' | 'client') => {
+    const newRole = currentRole === 'admin' ? 'client' : 'admin';
+    try {
+      let { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
+      if (error) {
+        await supabase.from('user_profiles').update({ role: newRole }).eq('id', userId);
+      }
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+      if (selectedUser?.id === userId) {
+        setSelectedUser(prev => prev ? { ...prev, role: newRole } : null);
+        setEditRole(newRole);
+      }
+    } catch (err: any) {
+      console.error('Error al actualizar rol de usuario:', err);
+    }
   };
 
   const exportAudiences = () => {
-    // Sanitizar cada campo contra inyección de fórmulas CSV (Excel/Google Sheets)
     const sanitizeCSV = (str: any) => {
       const val = String(str ?? '').replace(/"/g, '""');
-      // Prefijo apóstrofe para neutralizar fórmulas que comiencen con =, +, -, @
       const safeVal = /^[=+@-]/.test(val) ? `'${val}` : val;
       return `"${safeVal}"`;
     };
 
-    const headers = ['Email', 'Level', 'Tier', 'Total Spent', 'Archetype', 'Last Activity'];
+    const headers = ['Nombre', 'Email', 'Nivel', 'Tier', 'Rol', 'Pedidos', 'Total Gastado', 'Arquetipo', 'Ultima Actividad'];
     const csvContent = [
       headers.join(','),
       ...filteredUsers.map(u => [
+        sanitizeCSV(u.full_name),
         sanitizeCSV(u.email),
         sanitizeCSV(u.level),
         sanitizeCSV(u.tier),
+        sanitizeCSV(u.role),
+        sanitizeCSV(u.total_orders),
         sanitizeCSV(u.total_spent),
         sanitizeCSV(u.archetype),
         sanitizeCSV(u.last_activity)
@@ -162,18 +272,11 @@ export default function UsersEngine() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `holocard_audience_${filterType}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `holocard_usuarios_${filterType}_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
-    setLiveLogs(prev => [{
-      id: Math.random().toString(),
-      timestamp: new Date().toISOString(),
-      message: `DATA EXPORT: ${filteredUsers.length} profiles exported for ad campaign.`,
-      type: 'system'
-    }, ...prev]);
   };
 
   const fetchVault = async (userId: string) => {
@@ -182,7 +285,7 @@ export default function UsersEngine() {
       .from('user_collection')
       .select('*')
       .eq('user_id', userId)
-      .limit(10); // Limit for preview
+      .limit(10);
 
     if (!error && data) {
       setSelectedUserVault(data);
@@ -190,27 +293,16 @@ export default function UsersEngine() {
     setVaultLoading(false);
   };
 
-  const setupLogsMock = () => {
-    setLiveLogs([
-      { id: '1', timestamp: new Date().toISOString(), message: 'System Initialized. Engine Online.', type: 'system' },
-      { id: '2', timestamp: new Date(Date.now() - 60000).toISOString(), message: 'User trinity@matrix.com purchased 500 GD.', type: 'purchase' },
-      { id: '3', timestamp: new Date(Date.now() - 120000).toISOString(), message: 'User neo@matrix.com reached Level 42.', type: 'level_up' },
-    ]);
-    
-    // Simulate incoming logs
-    setInterval(() => {
-      setLiveLogs(prev => [
-        { id: Math.random().toString(), timestamp: new Date().toISOString(), message: `Encrypted payload received from sector ${Math.floor(Math.random()*999)}`, type: 'system' },
-        ...prev
-      ].slice(0, 10));
-    }, 15000);
-  };
-
   const applyFilters = () => {
     let filtered = [...users];
     
     if (searchQuery) {
-      filtered = filtered.filter(u => u.email.toLowerCase().includes(searchQuery.toLowerCase()));
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(u => 
+        u.email.toLowerCase().includes(q) || 
+        u.full_name.toLowerCase().includes(q) ||
+        u.id.toLowerCase().includes(q)
+      );
     }
 
     if (filterType === 'whales') {
@@ -219,6 +311,8 @@ export default function UsersEngine() {
       filtered = filtered.filter(u => u.is_at_risk);
     } else if (filterType === 'active_sub') {
       filtered = filtered.filter(u => u.tier.toLowerCase() !== 'entrenador');
+    } else if (filterType === 'admins') {
+      filtered = filtered.filter(u => u.role === 'admin');
     }
 
     setFilteredUsers(filtered);
@@ -238,11 +332,16 @@ export default function UsersEngine() {
     setOrdersLoading(false);
   };
 
+  const openGodConsole = (user: UserProfileWithStats) => {
+    setSelectedUser(user);
+  };
+
   useEffect(() => {
     if (selectedUser) {
       setEditLevel(selectedUser.level);
       setEditExp(selectedUser.exp);
       setEditTier(selectedUser.tier);
+      setEditRole(selectedUser.role);
       setEditPokeballs(selectedUser.pokeballs);
       setEditShadowNotes(selectedUser.shadow_notes || '');
       setEditPhone(selectedUser.phone || '');
@@ -259,33 +358,11 @@ export default function UsersEngine() {
   const saveUserEdits = async () => {
     if (!selectedUser) return;
 
-    const { error } = await supabase
-      .from('user_profiles')
-      .update({
-        level: editLevel,
-        points: editExp,
-        tier: editTier,
-        pokeballs: editPokeballs,
-        shadow_notes: editShadowNotes,
-        phone: editPhone,
-        address_street: editStreet,
-        address_city: editCity,
-        address_zip: editZip,
-        address_country: editCountry
-      })
-      .eq('id', selectedUser.id);
-
-    if (error) {
-      console.error('Error saving edits:', error);
-      alert('REWRITE FAILED: Access denied or network error.');
-      return;
-    }
-
-    setUsers(users.map(u => u.id === selectedUser.id ? {
-      ...u,
+    const payload = {
       level: editLevel,
-      exp: editExp,
+      points: editExp,
       tier: editTier,
+      role: editRole,
       pokeballs: editPokeballs,
       shadow_notes: editShadowNotes,
       phone: editPhone,
@@ -293,18 +370,21 @@ export default function UsersEngine() {
       address_city: editCity,
       address_zip: editZip,
       address_country: editCountry
+    };
+
+    let { error } = await supabase.from('profiles').update(payload).eq('id', selectedUser.id);
+    if (error) {
+      await supabase.from('user_profiles').update(payload).eq('id', selectedUser.id);
+    }
+
+    setUsers(users.map(u => u.id === selectedUser.id ? {
+      ...u,
+      ...payload
     } : u));
     
     setIsConfirmingEdit(false);
     setSelectedUser(null);
-    
-    // Add log
-    setLiveLogs(prev => [{
-      id: Math.random().toString(), 
-      timestamp: new Date().toISOString(), 
-      message: `ADMIN OVERRIDE: Profile ${selectedUser.email} rewritten in the mainframe. Nodes synced.`, 
-      type: 'system'
-    }, ...prev]);
+    fetchRealLogs();
   };
 
   const calculateAirdropImpact = () => {
@@ -327,22 +407,9 @@ export default function UsersEngine() {
 
     setIsDeploying(true);
     setDeployProgress(0);
-    
-    // Safety Log
-    setLiveLogs(prev => [{
-      id: Math.random().toString(),
-      timestamp: new Date().toISOString(),
-      message: `INITIATING GLOBAL AIRDROP: Target Count ${targets.length}. Resource: ${giftResourceType.toUpperCase()}. Payload authorized.`,
-      type: 'system'
-    }, ...prev]);
-
-    // Batching Execution con manejo de errores por fila
-    let successCount = 0;
-    let failCount = 0;
 
     for (let i = 0; i < targets.length; i++) {
       const target = targets[i];
-      
       try {
         const updateData: any = {};
         if (giftResourceType === 'exp') updateData.points = target.exp + giftAmount;
@@ -350,91 +417,86 @@ export default function UsersEngine() {
         if (giftResourceType === 'bp') updateData.points = (target.battle_pass_points || 0) + giftAmount;
 
         const { error: updateError } = await supabase
-          .from('user_profiles')
+          .from('profiles')
           .update(updateData)
           .eq('id', target.id);
 
-        if (updateError) throw updateError;
-
-        if (giftMessage) {
-          // Notification engine logic (non-blocking — error no frena el airdrop)
-          await supabase.from('user_notifications').insert({
-            user_id: target.id,
-            message: giftMessage,
-            type: 'gift',
-            read: false
-          }).select().catch(err => console.warn(`Notif skipped for ${target.id}:`, err));
+        if (updateError) {
+          await supabase.from('user_profiles').update(updateData).eq('id', target.id);
         }
-
-        successCount++;
       } catch (rowErr) {
-        console.warn(`[Airdrop] Failed to update user ${target.id}:`, rowErr);
-        failCount++;
+        console.warn(`[Airdrop] Error actualizando usuario ${target.id}:`, rowErr);
       }
 
       setDeployProgress(Math.round(((i + 1) / targets.length) * 100));
-      if (targets.length < 50) await new Promise(r => setTimeout(r, 50));
     }
 
     await fetchUsers();
     setIsDeploying(false);
     setIsConfirmingGift(false);
-    setLiveLogs(prev => [{
-      id: Math.random().toString(),
-      timestamp: new Date().toISOString(),
-      message: `AIRDROP COMPLETE: ${successCount}/${targets.length} nodes updated.${failCount > 0 ? ` ⚠️ ${failCount} errors skipped.` : ' Broadcast finalized.'}`,
-      type: 'system'
-    }, ...prev]);
+    fetchRealLogs();
   };
 
+  const totalRevenue = users.reduce((acc, u) => acc + (u.total_spent || 0), 0);
+  const totalWhales = users.filter(u => u.total_spent >= 500).length;
+
   return (
-    <div className="space-y-8 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-8 pb-20 font-sans text-zinc-200">
+      
+      {/* CABECERA */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-zinc-800 pb-6">
         <div>
-          <h1 className="text-3xl font-black text-white tracking-tight uppercase flex items-center gap-3">
-            <Database className="w-8 h-8 text-cyan-400" />
-            Users Engine
+          <h1 className="text-2xl sm:text-3xl font-black text-zinc-100 tracking-tight uppercase flex items-center gap-3">
+            <Users className="w-8 h-8 text-zinc-300" />
+            CRM & Users Engine
           </h1>
-          <p className="text-zinc-500 font-mono text-sm mt-1 uppercase tracking-widest">Global Mainframe Access // God Mode</p>
+          <p className="text-zinc-400 font-mono text-xs mt-1 uppercase tracking-widest">
+            Gestión de Usuarios y Clientes Registrados en Tiempo Real
+          </p>
         </div>
+
+        <button
+          onClick={() => { fetchUsers(); fetchRealLogs(); }}
+          className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Sincronizar Base de Datos
+        </button>
       </div>
 
-      {/* KPI DASHBOARD */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br from-zinc-900 to-black border border-white/10 p-6 rounded-2xl relative overflow-hidden group">
-          <div className="absolute inset-0 bg-cyan-500/5 group-hover:bg-cyan-500/10 transition-colors"></div>
+      {/* DASHBOARD DE MÉTRICAS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="bg-[#12141c] border border-zinc-800 p-6 rounded-2xl relative overflow-hidden shadow-xl">
           <div className="relative z-10">
-            <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Total LTV Revenue</p>
-            <p className="text-3xl font-black text-white">$6,745.00</p>
-            <div className="mt-4 h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-cyan-400 w-[70%]"></div>
+            <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Ingresos LTV Totales</p>
+            <p className="text-3xl font-black text-zinc-100">{totalRevenue.toFixed(2)}€</p>
+            <div className="mt-4 h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+              <div className="h-full bg-zinc-400 w-[85%]"></div>
             </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-zinc-900 to-black border border-white/10 p-6 rounded-2xl relative overflow-hidden group">
-          <div className="absolute inset-0 bg-red-500/5 group-hover:bg-red-500/10 transition-colors"></div>
+        <div className="bg-[#12141c] border border-zinc-800 p-6 rounded-2xl relative overflow-hidden shadow-xl">
           <div className="relative z-10">
-            <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Active Whales</p>
-            <p className="text-3xl font-black text-white">12</p>
-            <p className="text-[10px] text-red-400 font-mono mt-2">Users {'>'} $500 Spent</p>
+            <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Whales / Clientes VIP</p>
+            <p className="text-3xl font-black text-amber-400">{totalWhales}</p>
+            <p className="text-[10px] text-zinc-500 font-mono mt-2">Gasto acumulado {'>'} 500€</p>
           </div>
         </div>
 
-        <div className="col-span-1 md:col-span-2 bg-gradient-to-br from-zinc-900 to-black border border-white/10 p-6 rounded-2xl relative overflow-hidden">
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 mix-blend-screen"></div>
+        <div className="col-span-1 md:col-span-2 bg-[#12141c] border border-zinc-800 p-6 rounded-2xl relative overflow-hidden shadow-xl">
           <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Battle Pass Global</p>
-              <p className="text-xl font-black text-white">Season 4: Cyber Dawn</p>
+              <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Directorio Registrado</p>
+              <p className="text-2xl font-black text-zinc-100">{users.length} Usuarios Activos</p>
+              <p className="text-[11px] text-zinc-400 mt-1">Sincronizado con Supabase Auth & Profiles</p>
             </div>
             <button 
-              title="Reiniciar Temporada de Battle Pass"
-              aria-label="Reiniciar Temporada"
-              className="px-4 py-2 bg-red-600/20 text-red-500 border border-red-500/30 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center gap-2"
+              onClick={exportAudiences}
+              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 active:scale-95"
             >
-              <RefreshCw className="w-4 h-4" />
-              Reset Season
+              <Database className="w-4 h-4 text-zinc-300" />
+              Exportar CSV
             </button>
           </div>
         </div>
@@ -442,136 +504,149 @@ export default function UsersEngine() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         
-        {/* DATA GRID & FILTERS (Col Span 2) */}
+        {/* TABLA PRINCIPAL CRM */}
         <div className="xl:col-span-2 space-y-6">
-          <div className="flex flex-wrap gap-4 items-center justify-between p-4 bg-zinc-900/50 border border-white/5 rounded-2xl">
-          <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
-            <div className="flex bg-zinc-900/50 rounded-xl p-1 border border-white/5">
-              {(['all', 'whales', 'dormant', 'active_sub'] as const).map((t) => (
+          
+          {/* BARRA DE BÚSQUEDA Y FILTROS */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-[#12141c] border border-zinc-800 rounded-2xl shadow-xl">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              {(['all', 'whales', 'dormant', 'active_sub', 'admins'] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setFilterType(t)}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                    filterType === t ? "bg-red-600 text-white shadow-lg shadow-red-600/20" : "text-zinc-500 hover:text-zinc-300"
+                    "px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
+                    filterType === t 
+                      ? "bg-zinc-700 text-white shadow-md border border-zinc-600" 
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
                   )}
                 >
-                  {t.replace('_', ' ')}
+                  {t === 'all' ? 'Todos' : t === 'whales' ? 'Whales' : t === 'dormant' ? 'En Riesgo' : t === 'active_sub' ? 'Suscritos' : 'Admins'}
                 </button>
               ))}
             </div>
-            
-            <button 
-              onClick={exportAudiences}
-              title="Exportar audiencia a CSV"
-              aria-label="Exportar audiencia"
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl border border-white/10 transition-all text-[10px] font-black uppercase tracking-widest"
-            >
-              <Database className="w-4 h-4" />
-              Export Audience
-            </button>
-          </div>
-            <div className="relative">
-              <label htmlFor="user-search" className="sr-only">Search Users</label>
+
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
               <input 
-                id="user-search"
                 type="text" 
-                title="Buscar usuarios por Email o ID"
-                placeholder="Search Email / ID..."
+                placeholder="Buscar por Nombre / Email / ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-black/50 border border-white/10 rounded-lg py-2 pl-10 pr-4 text-xs font-mono text-white focus:border-cyan-500 focus:outline-none w-full sm:w-64"
+                className="bg-zinc-900 border border-zinc-800 rounded-xl py-2 pl-9 pr-4 text-xs font-medium text-zinc-100 placeholder-zinc-500 focus:border-zinc-600 focus:outline-none w-full"
               />
             </div>
           </div>
 
-          <div className="bg-zinc-900/40 border border-white/5 rounded-2xl overflow-hidden overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[600px]">
+          {/* TABLA DE USUARIOS REALES */}
+          <div className="bg-[#12141c] border border-zinc-800 rounded-2xl overflow-hidden overflow-x-auto shadow-2xl">
+            <table className="w-full text-left border-collapse min-w-[650px]">
               <thead>
-                <tr className="bg-black/50 border-b border-white/5 text-[10px] uppercase tracking-widest text-zinc-500">
-                  <th className="p-4 font-bold">Operative</th>
-                  <th className="p-4 font-bold text-center">Level / Tier</th>
-                  <th className="p-4 font-bold text-center">LTV</th>
-                  <th className="p-4 font-bold text-center">HoloBalls</th>
-                  <th className="p-4 font-bold text-right">Action</th>
+                <tr className="bg-zinc-800/60 border-b border-zinc-800 text-[10px] uppercase tracking-widest text-zinc-400 font-black">
+                  <th className="p-4">Usuario / Cliente</th>
+                  <th className="p-4 text-center">Rol / Nivel</th>
+                  <th className="p-4 text-center">Pedidos</th>
+                  <th className="p-4 text-right">LTV Real</th>
+                  <th className="p-4 text-center">HoloBalls</th>
+                  <th className="p-4 text-center">Acciones</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-zinc-800/60 text-xs">
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={`skeleton-${i}`} className="border-b border-white/5 animate-pulse">
-                      <td className="p-4"><div className="h-10 w-48 bg-white/5 rounded-lg" /></td>
-                      <td className="p-4 text-center"><div className="h-8 w-16 mx-auto bg-white/5 rounded-lg" /></td>
-                      <td className="p-4 text-center"><div className="h-6 w-16 mx-auto bg-white/5 rounded-lg" /></td>
-                      <td className="p-4 text-center"><div className="h-6 w-20 mx-auto bg-white/5 rounded-full" /></td>
-                      <td className="p-4 text-right"><div className="h-8 w-24 ml-auto bg-white/5 rounded-lg" /></td>
+                    <tr key={`skeleton-${i}`} className="animate-pulse">
+                      <td className="p-4"><div className="h-10 w-48 bg-zinc-800/60 rounded-xl" /></td>
+                      <td className="p-4 text-center"><div className="h-8 w-20 mx-auto bg-zinc-800/60 rounded-xl" /></td>
+                      <td className="p-4 text-center"><div className="h-6 w-12 mx-auto bg-zinc-800/60 rounded-xl" /></td>
+                      <td className="p-4 text-right"><div className="h-6 w-16 ml-auto bg-zinc-800/60 rounded-xl" /></td>
+                      <td className="p-4 text-center"><div className="h-6 w-16 mx-auto bg-zinc-800/60 rounded-full" /></td>
+                      <td className="p-4 text-center"><div className="h-8 w-24 mx-auto bg-zinc-800/60 rounded-xl" /></td>
                     </tr>
                   ))
                 ) : filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-zinc-500 text-xs font-mono uppercase tracking-widest">Sin usuarios registrados</td>
+                    <td colSpan={6} className="p-12 text-center text-zinc-500 font-bold uppercase tracking-widest">
+                      No hay usuarios que coincidan con la búsqueda
+                    </td>
                   </tr>
                 ) : filteredUsers.map((user) => (
                   <tr 
                     key={user.id} 
                     className={cn(
-                      "group border-b border-white/5 hover:bg-white/[0.02] transition-colors cursor-pointer",
-                      user.is_at_risk && "bg-red-900/10 animate-pulse-slow border-l-2 border-l-red-600"
+                      "group hover:bg-zinc-800/40 transition-colors cursor-pointer",
+                      user.is_at_risk && "bg-amber-950/10 border-l-2 border-l-amber-500"
                     )}
                     onClick={() => openGodConsole(user)}
                   >
+                    {/* Usuario / Email */}
                     <td className="p-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-900 to-black border border-cyan-500/30 flex items-center justify-center shadow-[0_0_10px_rgba(34,211,238,0.2)]">
-                          <User className="w-5 h-5 text-cyan-400" />
+                        <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-200 font-black text-sm shrink-0">
+                          {user.full_name?.charAt(0).toUpperCase() || 'U'}
                         </div>
-                        <div>
-                          <p className="text-sm font-bold text-white group-hover:text-red-500 transition-colors">
-                            {user.email}
-                            {user.is_at_risk && <span className="ml-2 text-[8px] text-red-500 uppercase tracking-tighter animate-pulse">⚠️ AT RISK</span>}
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-zinc-100 group-hover:text-amber-400 transition-colors truncate">
+                            {user.full_name}
                           </p>
-                          <p className="text-[10px] font-mono text-zinc-500">ID: {user.id.substring(0, 8)}</p>
+                          <p className="text-[11px] font-mono text-zinc-400 truncate flex items-center gap-1">
+                            <Mail className="w-3 h-3 text-zinc-500 shrink-0" />
+                            {user.email}
+                          </p>
                         </div>
                       </div>
                     </td>
+
+                    {/* Rol y Nivel */}
                     <td className="p-4 text-center">
-                      <div className="flex flex-col gap-1 items-center">
-                        <p className="text-sm font-bold text-white">Lvl {user.level}</p>
-                        <div className="flex gap-1">
-                          <span className="text-[8px] font-bold text-yellow-500 uppercase tracking-widest px-1.5 py-0.5 bg-yellow-500/10 rounded border border-yellow-500/20">{user.tier}</span>
-                          {user.archetype === 'Whale' && <span className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[8px] font-black flex items-center gap-1"><Star className="w-2 h-2" /> Whale</span>}
-                          {user.archetype === 'Collector' && <span className="px-1.5 py-0.5 rounded bg-cyan-600 text-white text-[8px] font-black">Collector</span>}
-                          {user.archetype === 'Hunter' && <span className="px-1.5 py-0.5 rounded bg-green-600 text-white text-[8px] font-black">Hunter</span>}
-                        </div>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                          user.role === 'admin' 
+                            ? 'bg-amber-400/10 text-amber-400 border-amber-400/30' 
+                            : 'bg-zinc-800 text-zinc-300 border-zinc-700'
+                        }`}>
+                          {user.role === 'admin' ? 'Admin' : 'Cliente'}
+                        </span>
+                        <span className="text-[10px] text-zinc-400 font-bold">Lvl {user.level} • {user.tier}</span>
                       </div>
                     </td>
+
+                    {/* Pedidos */}
                     <td className="p-4 text-center">
-                      <p className="text-sm font-bold text-green-400">${user.total_spent.toLocaleString()}</p>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-zinc-800/80 rounded-lg border border-zinc-700/50 text-zinc-200 font-bold">
+                        <ShoppingBag className="w-3 h-3 text-zinc-400" />
+                        {user.total_orders}
+                      </span>
                     </td>
+
+                    {/* LTV Real */}
+                    <td className="p-4 text-right font-black text-zinc-100">
+                      {user.total_spent.toFixed(2)}€
+                    </td>
+
+                    {/* HoloBalls */}
                     <td className="p-4 text-center">
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-full">
-                        <Hexagon className="w-3.5 h-3.5 text-cyan-400" />
-                        <span className="text-xs font-black text-cyan-400">{user.pokeballs}</span>
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-800/80 border border-zinc-700/60 rounded-full">
+                        <Hexagon className="w-3.5 h-3.5 text-amber-400" />
+                        <span className="text-xs font-black text-amber-400">{user.pokeballs}</span>
                       </div>
                     </td>
-                    <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+
+                    {/* Acciones */}
+                    <td className="p-4 text-center">
+                      <div className="flex items-center justify-center gap-2" onClick={(e) => e.stopPropagation()}>
                         <button 
-                          onClick={() => quickAirdrop(user)}
-                          className="p-2 rounded-lg bg-zinc-800 hover:bg-cyan-600/20 text-zinc-500 hover:text-cyan-400 transition-all border border-white/5"
-                          title="Quick Re-engage Airdrop"
-                          aria-label="Quick Airdrop"
+                          onClick={() => toggleUserRole(user.id, user.role)}
+                          className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all active:scale-95"
+                          title="Cambiar permisos"
                         >
-                          <Zap className="w-4 h-4" />
+                          {user.role === 'admin' ? 'Hacer Cliente' : 'Hacer Admin'}
                         </button>
                         <button 
                           onClick={() => openGodConsole(user)}
-                          className="p-2 rounded-lg bg-white/5 hover:bg-red-600/20 hover:text-red-500 text-zinc-400 transition-colors inline-flex items-center justify-center border border-white/5"
-                          title="Open God Console"
-                          aria-label="Open God Console"
+                          className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors border border-zinc-700"
+                          title="Abrir Ficha"
                         >
-                          <Crosshair className="w-5 h-5" />
+                          <Crosshair className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
@@ -582,27 +657,24 @@ export default function UsersEngine() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN: LOGS & MASSIVE ACTIONS */}
+        {/* FEED Y RECURSOS */}
         <div className="space-y-6">
           
-          {/* MATRIX LOGS FEED */}
-          <div className="bg-[#050505] border border-green-500/20 rounded-2xl p-6 relative overflow-hidden h-[400px] flex flex-col">
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(0,255,0,0.03)_1px,transparent_1px)] bg-[length:100%_4px] pointer-events-none"></div>
-            
-            <div className="flex items-center gap-3 mb-4 border-b border-green-500/20 pb-4">
-              <Terminal className="w-5 h-5 text-green-500" />
-              <h3 className="text-xs font-bold text-green-500 uppercase tracking-[0.2em] animate-pulse">System Matrix Feed</h3>
+          {/* FEED REAL DE ACTIVIDAD */}
+          <div className="bg-[#12141c] border border-zinc-800 rounded-2xl p-6 relative overflow-hidden h-[360px] flex flex-col shadow-xl">
+            <div className="flex items-center gap-3 mb-4 border-b border-zinc-800 pb-4">
+              <Terminal className="w-5 h-5 text-zinc-300" />
+              <h3 className="text-xs font-black text-zinc-300 uppercase tracking-widest">Actividad Reciente</h3>
             </div>
             
             <div className="flex-1 overflow-y-auto space-y-3 font-mono text-[10px] custom-scrollbar pr-2">
               {liveLogs.map(log => (
-                <div key={log.id} className="flex gap-3">
-                  <span className="text-green-700 shrink-0">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                <div key={log.id} className="flex gap-2.5">
+                  <span className="text-zinc-500 shrink-0">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
                   <span className={cn(
-                    "flex-1 break-words",
-                    log.type === 'system' ? "text-green-400" :
-                    log.type === 'purchase' ? "text-yellow-400" :
-                    log.type === 'level_up' ? "text-cyan-400" : "text-zinc-400"
+                    "flex-1 break-words font-medium",
+                    log.type === 'system' ? "text-zinc-300" :
+                    log.type === 'purchase' ? "text-amber-400" : "text-zinc-400"
                   )}>
                     {log.message}
                   </span>
@@ -611,178 +683,100 @@ export default function UsersEngine() {
             </div>
           </div>
 
-          {/* ULTIMATE GIFT SPAWNER (AIRDROP PRO) */}
-          <div className="bg-[#09090b] border border-yellow-500/30 rounded-2xl p-6 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/5 blur-[60px] rounded-full -mr-16 -mt-16 group-hover:bg-yellow-500/10 transition-all"></div>
-            
+          {/* MÓDULO AIRDROP */}
+          <div className="bg-[#12141c] border border-zinc-800 rounded-2xl p-6 relative overflow-hidden shadow-xl">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
-                  <Gift className="w-5 h-5 text-yellow-500" />
+                <div className="p-2 bg-zinc-800 rounded-xl border border-zinc-700">
+                  <Gift className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-white uppercase tracking-widest">Airdrop Pro</h3>
-                  <p className="text-[10px] text-zinc-500 font-mono">Precision supply deployment</p>
+                  <h3 className="text-sm font-black text-zinc-100 uppercase tracking-widest">Airdrop Pro</h3>
+                  <p className="text-[10px] text-zinc-400 font-mono">Inyección masiva de recursos</p>
                 </div>
-              </div>
-              <div className="px-2 py-1 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
-                <span className="text-[10px] font-black text-yellow-500 animate-pulse uppercase">Tactical Mode</span>
               </div>
             </div>
 
             {isDeploying ? (
-              <div className="space-y-6 py-4 animate-in fade-in slide-in-from-bottom-4">
+              <div className="space-y-6 py-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Deploying Payload...</p>
-                  <span className="text-sm font-mono text-yellow-500">{deployProgress}%</span>
+                  <p className="text-[10px] font-black text-zinc-200 uppercase tracking-widest">Enviando recursos...</p>
+                  <span className="text-sm font-mono text-amber-400 font-bold">{deployProgress}%</span>
                 </div>
-                <div className="h-3 bg-zinc-900 rounded-full border border-white/5 overflow-hidden p-0.5">
+                <div className="h-3 bg-zinc-900 rounded-full border border-zinc-800 overflow-hidden p-0.5">
                   <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: `${deployProgress}%` }}
-                    className="h-full bg-gradient-to-r from-yellow-600 to-yellow-400 rounded-full shadow-[0_0_15px_rgba(234,179,8,0.5)]" 
+                    className="h-full bg-amber-400 rounded-full shadow-md" 
                   />
-                </div>
-                <div className="flex justify-center">
-                  <Activity className="w-8 h-8 text-yellow-500/30 animate-spin" />
                 </div>
               </div>
             ) : isConfirmingGift ? (
-              <div className="space-y-6 animate-in fade-in zoom-in duration-300">
-                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl space-y-3">
-                  <div className="flex items-center gap-2 text-red-500">
-                    <ShieldAlert className="w-5 h-5" />
-                    <p className="text-xs font-black uppercase tracking-widest">Critical Confirmation</p>
+              <div className="space-y-4">
+                <div className="p-4 bg-amber-950/20 border border-amber-500/30 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <ShieldAlert className="w-4 h-4" />
+                    <p className="text-xs font-black uppercase tracking-widest">Confirmar Envío</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-[11px] text-zinc-300">
-                      You are about to deploy <span className="text-yellow-500 font-bold">{giftAmount} {giftResourceType.toUpperCase()}</span> to 
-                      <span className="text-white font-bold"> {calculateAirdropImpact().length} users</span> matching your filters.
-                    </p>
-                    <p className="text-[9px] text-zinc-500 font-mono italic">Signature: AUTH_SIG_GIFT_{Math.random().toString(36).substring(7).toUpperCase()}</p>
-                  </div>
+                  <p className="text-[11px] text-zinc-300">
+                    Vas a enviar <span className="text-amber-400 font-bold">{giftAmount} {giftResourceType.toUpperCase()}</span> a 
+                    <span className="text-white font-bold"> {calculateAirdropImpact().length} usuarios</span>.
+                  </p>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="relative h-14 w-full bg-zinc-900/50 rounded-xl border border-white/10 overflow-hidden group/btn">
-                    <div 
-                      className="absolute inset-0 bg-red-600/30 transition-all duration-75"
-                      style={{ width: `${holdProgress}%` }}
-                    />
-                    <button 
-                      onMouseDown={() => {
-                        const start = Date.now();
-                        const timer = setInterval(() => {
-                          const elapsed = Date.now() - start;
-                          const progress = Math.min((elapsed / 3000) * 100, 100);
-                          setHoldProgress(progress);
-                          if (progress >= 100) {
-                            clearInterval(timer);
-                            executeMassiveGift();
-                          }
-                        }, 30);
-                        const stopHold = () => {
-                          clearInterval(timer);
-                          if (holdProgress < 100) setHoldProgress(0);
-                          window.removeEventListener('mouseup', stopHold);
-                        };
-                        window.addEventListener('mouseup', stopHold);
-                      }}
-                      className="absolute inset-0 w-full h-full text-xs font-black text-white uppercase tracking-widest flex items-center justify-center gap-2"
-                    >
-                      <Lock className="w-4 h-4" />
-                      {holdProgress > 0 ? `HOLDING (${Math.ceil(3 - (holdProgress*3/100))}s)` : "Hold 3s to Deploy"}
-                    </button>
-                  </div>
-                  <button onClick={() => setIsConfirmingGift(false)} className="w-full py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest hover:text-white transition-colors">Abort Mission</button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setIsConfirmingGift(false)} 
+                    className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-bold uppercase tracking-wider"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={executeMassiveGift} 
+                    className="flex-1 py-3 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-xl text-xs uppercase tracking-wider"
+                  >
+                    Confirmar
+                  </button>
                 </div>
               </div>
             ) : (
-              <div className="space-y-6">
-                {/* Advanced Segmentation */}
-                <div className="space-y-3">
-                  <p className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
-                    <Users className="w-3 h-3" /> Targeted Population
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[8px] font-mono text-zinc-600 uppercase">Tier</label>
-                      <select value={giftTier} onChange={e => setGiftTier(e.target.value)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-bold text-white outline-none focus:border-yellow-500" title="Tier">
-                        <option value="All">All Tiers</option>
-                        <option value="Entrenador">Entrenador</option>
-                        <option value="Elite">Elite</option>
-                        <option value="Apex">Apex</option>
-                        <option value="Legend">Legend</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[8px] font-mono text-zinc-600 uppercase">Inactivity (Days+)</label>
-                      <input type="number" value={giftInactivity} onChange={e => setGiftInactivity(parseInt(e.target.value) || 0)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white outline-none focus:border-yellow-500" title="Inactivity" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[8px] font-mono text-zinc-600 uppercase">Level Range</label>
-                      <div className="flex items-center gap-1">
-                        <input type="number" value={giftMinLevel} onChange={e => setGiftMinLevel(parseInt(e.target.value) || 0)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white text-center" title="Min Level" />
-                        <span className="text-zinc-600">-</span>
-                        <input type="number" value={giftMaxLevel} onChange={e => setGiftMaxLevel(parseInt(e.target.value) || 100)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white text-center" title="Max Level" />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[8px] font-mono text-zinc-600 uppercase">Min LTV ($)</label>
-                      <input type="number" value={giftMinLTV} onChange={e => setGiftMinLTV(parseInt(e.target.value) || 0)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white outline-none focus:border-yellow-500" title="Min LTV" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Resource Injection */}
-                <div className="space-y-3">
-                  <p className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
-                    <Package className="w-3 h-3" /> Supply Configuration
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <select value={giftResourceType} onChange={e => setGiftResourceType(e.target.value as any)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-bold text-white outline-none focus:border-yellow-500" title="Resource Type">
-                      <option value="exp">Experience (EXP)</option>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-mono text-zinc-400 uppercase">Recurso</label>
+                    <select 
+                      value={giftResourceType} 
+                      onChange={e => setGiftResourceType(e.target.value as any)} 
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs font-bold text-zinc-200 outline-none"
+                    >
                       <option value="pokeballs">HoloBalls</option>
-                      <option value="bp">BP Points</option>
-                      <option value="sku">Custom SKU</option>
+                      <option value="exp">Experiencia (EXP)</option>
+                      <option value="bp">Puntos BP</option>
                     </select>
-                    <input type="number" value={giftAmount} onChange={e => setGiftAmount(parseInt(e.target.value) || 0)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white outline-none focus:border-yellow-500" title="Amount" placeholder="Amount" />
                   </div>
-                  {giftResourceType === 'sku' && (
-                    <input type="text" value={giftSKU} onChange={e => setGiftSKU(e.target.value)} className="w-full bg-black border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white outline-none focus:border-yellow-500" placeholder="ENTER PRODUCT SKU..." title="Product SKU" />
-                  )}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-mono text-zinc-400 uppercase">Cantidad</label>
+                    <input 
+                      type="number" 
+                      value={giftAmount} 
+                      onChange={e => setGiftAmount(parseInt(e.target.value) || 0)} 
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs font-bold text-zinc-200 outline-none" 
+                    />
+                  </div>
                 </div>
 
-                {/* Broadcast Engine */}
-                <div className="space-y-1">
-                  <label className="text-[8px] font-mono text-zinc-600 uppercase">Custom Broadcast Message</label>
-                  <textarea 
-                    value={giftMessage}
-                    title="Mensaje de difusión"
-                    onChange={e => setGiftMessage(e.target.value)}
-                    placeholder="Subject: A gift from Sasori Labs..."
-                    className="w-full bg-black border border-white/10 rounded-xl p-3 text-[10px] text-zinc-300 outline-none focus:border-yellow-500 h-16 resize-none"
-                  />
-                </div>
-
-                {/* Impact Simulation */}
-                <div className="bg-yellow-500/5 border border-yellow-500/10 rounded-xl p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <RefreshCw className="w-3.5 h-3.5 text-yellow-500 animate-spin-slow" />
-                    <span className="text-[9px] font-black text-yellow-500 uppercase tracking-widest">Simulator Result</span>
-                  </div>
-                  <span className="text-xs font-black text-white">{calculateAirdropImpact().length} Targets</span>
+                <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Destinatarios</span>
+                  <span className="text-xs font-black text-amber-400">{calculateAirdropImpact().length} Usuarios</span>
                 </div>
 
                 <button 
                   onClick={() => setIsConfirmingGift(true)}
                   disabled={calculateAirdropImpact().length === 0}
-                  className="w-full py-4 bg-yellow-500 hover:bg-yellow-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-black font-black uppercase tracking-widest text-xs rounded-2xl shadow-[0_0_30px_rgba(234,179,8,0.2)] transition-all flex items-center justify-center gap-2"
+                  className="w-full py-3.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 font-bold uppercase tracking-wider text-xs rounded-xl border border-zinc-700 transition-all flex items-center justify-center gap-2"
                 >
-                  <Zap className="w-4 h-4" />
-                  Launch Airdrop
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  Lanzar Airdrop
                 </button>
               </div>
             )}
@@ -791,7 +785,7 @@ export default function UsersEngine() {
         </div>
       </div>
 
-      {/* GOD CONSOLE SLIDE-OVER */}
+      {/* GOD CONSOLE / PANEL DETALLE CRM */}
       <AnimatePresence>
         {selectedUser && (
           <>
@@ -807,295 +801,235 @@ export default function UsersEngine() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-[#09090b] border-l border-white/10 z-[110] shadow-2xl flex flex-col"
+              className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-[#12141c] border-l border-zinc-800 z-[110] shadow-2xl flex flex-col text-zinc-200"
             >
-              <div className="p-6 border-b border-white/10 flex items-center justify-between bg-black/40">
+              {/* Header */}
+              <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/60">
                 <div className="flex items-center gap-3">
-                  <Crosshair className="w-6 h-6 text-cyan-400" />
+                  <div className="p-2.5 bg-zinc-800 rounded-xl border border-zinc-700">
+                    <UserCheck className="w-5 h-5 text-zinc-200" />
+                  </div>
                   <div>
-                    <h2 className="text-sm font-black uppercase tracking-widest text-white">God Console</h2>
-                    <p className="text-[10px] font-mono text-zinc-500">Target: {selectedUser.email}</p>
+                    <h2 className="text-sm font-black uppercase tracking-wider text-zinc-100">{selectedUser.full_name}</h2>
+                    <p className="text-[11px] font-mono text-zinc-400">{selectedUser.email}</p>
                   </div>
                 </div>
-                <button onClick={() => setSelectedUser(null)} className="p-2 text-zinc-500 hover:text-white bg-white/5 rounded-full" title="Close" aria-label="Cerrar consola">
+                <button 
+                  onClick={() => setSelectedUser(null)} 
+                  className="p-2 text-zinc-400 hover:text-white bg-zinc-800 rounded-xl border border-zinc-700"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Tab Navigation */}
-              <div className="flex border-b border-white/5 bg-black/20">
+              {/* Pestañas */}
+              <div className="flex border-b border-zinc-800 bg-zinc-900/30">
                 {[
-                  { id: 'mainframe', label: 'Mainframe', icon: Activity },
-                  { id: 'identity', label: 'Identity', icon: Shield },
-                  { id: 'transactions', label: 'Logs', icon: History }
+                  { id: 'mainframe', label: 'Parámetros', icon: Activity },
+                  { id: 'identity', label: 'Datos Personales', icon: Shield },
+                  { id: 'transactions', label: 'Pedidos', icon: History }
                 ].map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveConsoleTab(tab.id as any)}
                     className={cn(
-                      "flex-1 flex items-center justify-center gap-2 py-4 text-[10px] font-black uppercase tracking-widest transition-all relative",
-                      activeConsoleTab === tab.id ? "text-cyan-400 bg-cyan-400/5" : "text-zinc-500 hover:text-zinc-300"
+                      "flex-1 flex items-center justify-center gap-2 py-3.5 text-[11px] font-bold uppercase tracking-wider transition-all relative border-b-2",
+                      activeConsoleTab === tab.id ? "text-zinc-100 border-amber-400 bg-zinc-800/40" : "text-zinc-400 border-transparent hover:text-zinc-200"
                     )}
                   >
                     <tab.icon className="w-3.5 h-3.5" />
                     {tab.label}
-                    {activeConsoleTab === tab.id && (
-                      <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
-                    )}
                   </button>
                 ))}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+              {/* Contenido Pestañas */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                 
                 {activeConsoleTab === 'mainframe' && (
-                  <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                    {/* Hot Editor */}
-                    <section className="space-y-6">
-                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 flex items-center gap-2">
-                        <Activity className="w-4 h-4" /> Parameter Override
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-800 pb-2">
+                        Configuración de Nivel y Rol
                       </h3>
                       
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[10px] font-mono text-zinc-500 uppercase">Level</label>
-                          <input type="number" value={editLevel} onChange={e => setEditLevel(parseInt(e.target.value) || 1)} className="w-full mt-1 bg-black border border-white/10 rounded-lg p-3 text-lg font-black text-cyan-400 text-center outline-none focus:border-cyan-500" title="Level" placeholder="Level" />
+                          <label className="text-[10px] font-mono text-zinc-400 uppercase">Nivel</label>
+                          <input 
+                            type="number" 
+                            value={editLevel} 
+                            onChange={e => setEditLevel(parseInt(e.target.value) || 1)} 
+                            className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-sm font-black text-zinc-100 text-center outline-none" 
+                          />
                         </div>
                         <div>
-                          <label className="text-[10px] font-mono text-zinc-500 uppercase">Experience</label>
-                          <input type="number" value={editExp} onChange={e => setEditExp(parseInt(e.target.value) || 0)} className="w-full mt-1 bg-black border border-white/10 rounded-lg p-3 text-lg font-black text-white text-center outline-none" title="Experience" placeholder="Experience" />
+                          <label className="text-[10px] font-mono text-zinc-400 uppercase">Puntos EXP</label>
+                          <input 
+                            type="number" 
+                            value={editExp} 
+                            onChange={e => setEditExp(parseInt(e.target.value) || 0)} 
+                            className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-sm font-black text-zinc-100 text-center outline-none" 
+                          />
                         </div>
                       </div>
 
-                      <div>
-                        <label className="text-[10px] font-mono text-zinc-500 uppercase">Subscription Tier</label>
-                        <select value={editTier} onChange={e => setEditTier(e.target.value)} className="w-full mt-1 bg-black border border-white/10 rounded-lg p-3 text-sm font-bold text-white uppercase outline-none focus:border-cyan-500" title="Subscription Tier">
-                          <option value="Entrenador">Entrenador</option>
-                          <option value="Elite">Elite</option>
-                          <option value="Apex">Apex</option>
-                          <option value="Legend">Legend</option>
-                        </select>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-mono text-zinc-400 uppercase">Tier / Suscripción</label>
+                          <select 
+                            value={editTier} 
+                            onChange={e => setEditTier(e.target.value)} 
+                            className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs font-bold text-zinc-100 outline-none"
+                          >
+                            <option value="Entrenador">Entrenador</option>
+                            <option value="Elite">Elite</option>
+                            <option value="Apex">Apex</option>
+                            <option value="Legend">Legend</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-mono text-zinc-400 uppercase">Rol de Usuario</label>
+                          <select 
+                            value={editRole} 
+                            onChange={e => setEditRole(e.target.value as any)} 
+                            className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs font-bold text-zinc-100 outline-none"
+                          >
+                            <option value="client">Cliente</option>
+                            <option value="admin">Administrador</option>
+                          </select>
+                        </div>
                       </div>
 
-                      {/* Shadow Notes */}
                       <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] font-mono text-zinc-500 uppercase">Shadow Notes (Admin Only)</label>
-                          <span className="text-[8px] text-red-500 animate-pulse font-bold">ENCRYPTED</span>
-                        </div>
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Notas Privadas (CRM Admin)</label>
                         <textarea 
                           value={editShadowNotes}
                           onChange={(e) => setEditShadowNotes(e.target.value)}
-                          placeholder="Enter private observations about this subject..."
-                          className="w-full h-24 bg-black border border-white/10 rounded-xl px-4 py-3 text-xs font-medium text-zinc-300 focus:outline-none focus:border-red-600 resize-none custom-scrollbar"
+                          placeholder="Escribe observaciones internas del cliente..."
+                          className="w-full h-24 bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-200 outline-none resize-none custom-scrollbar"
                         />
                       </div>
-                    </section>
+                    </div>
 
-                    {/* Inventory Manager */}
-                    <section>
-                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
-                        <Package className="w-4 h-4" /> Inventory Injection
-                      </h3>
-                      
-                      <div className="bg-cyan-900/10 border border-cyan-500/20 rounded-xl p-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Hexagon className="w-8 h-8 text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest text-cyan-400">HoloBalls</p>
-                            <p className="text-[10px] text-zinc-500 font-mono">Current Balance</p>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-3 bg-black rounded-lg p-1 border border-white/5">
-                          <button onClick={() => setEditPokeballs(Math.max(0, editPokeballs - 1))} className="w-8 h-8 flex items-center justify-center bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors" title="Decrease">-</button>
-                          <span className="w-8 text-center font-black text-lg text-white">{editPokeballs}</span>
-                          <button onClick={() => setEditPokeballs(editPokeballs + 1)} className="w-8 h-8 flex items-center justify-center bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white transition-colors" title="Increase">+</button>
+                    <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Hexagon className="w-7 h-7 text-amber-400" />
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wider text-zinc-100">HoloBalls</p>
+                          <p className="text-[10px] text-zinc-400">Saldo actual</p>
                         </div>
                       </div>
-                    </section>
-                    
-                    {/* Vault Preview */}
-                    <section>
-                       <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
-                        <Database className="w-4 h-4" /> Collection Vault
-                      </h3>
                       
-                      {vaultLoading ? (
-                        <div className="p-8 border border-white/5 rounded-xl text-center bg-black/20 animate-pulse">
-                          <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                          <p className="text-[10px] text-zinc-600 uppercase font-bold tracking-tighter">Accessing Datastream...</p>
-                        </div>
-                      ) : selectedUserVault.length > 0 ? (
-                        <div className="grid grid-cols-5 gap-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
-                          {selectedUserVault.map((card, i) => (
-                            <div key={i} className="aspect-[2/3] bg-zinc-900 rounded-md border border-white/5 overflow-hidden group relative cursor-help" title={card.card_name}>
-                              <img 
-                                src={card.image_url || '/Imagenes/card-back.png'} 
-                                alt={card.card_name}
-                                className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" 
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="p-8 border border-dashed border-white/10 rounded-xl text-center bg-black/20">
-                          <Package className="w-6 h-6 text-zinc-700 mx-auto mb-2" />
-                          <p className="text-xs text-zinc-600 font-bold uppercase tracking-widest">Vault Empty</p>
-                        </div>
-                      )}
-                    </section>
+                      <div className="flex items-center gap-2 bg-zinc-800 rounded-lg p-1 border border-zinc-700">
+                        <button onClick={() => setEditPokeballs(Math.max(0, editPokeballs - 1))} className="w-7 h-7 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 rounded text-zinc-200 font-bold">-</button>
+                        <span className="w-8 text-center font-black text-sm text-zinc-100">{editPokeballs}</span>
+                        <button onClick={() => setEditPokeballs(editPokeballs + 1)} className="w-7 h-7 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 rounded text-zinc-200 font-bold">+</button>
+                      </div>
+                    </div>
                   </div>
                 )}
 
                 {activeConsoleTab === 'identity' && (
-                  <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <section className="space-y-6">
-                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 flex items-center gap-2">
-                        <Shield className="w-4 h-4" /> Identity Matrix
-                      </h3>
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-800 pb-2">
+                      Información de Contacto
+                    </h3>
 
-                      <div className="space-y-4">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-mono text-zinc-500 uppercase">Primary Email (Immutable)</label>
-                          <div className="w-full bg-zinc-900 border border-white/5 rounded-lg p-3 text-sm text-zinc-400 font-mono">
-                            {selectedUser.email}
-                          </div>
-                        </div>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Teléfono de Contacto</label>
+                        <input 
+                          type="text" 
+                          value={editPhone} 
+                          onChange={e => setEditPhone(e.target.value)} 
+                          className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-200 outline-none" 
+                          placeholder="+34 600 000 000" 
+                        />
+                      </div>
 
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-mono text-zinc-500 uppercase">Phone Number</label>
+                      <div>
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Dirección / Calle</label>
+                        <input 
+                          type="text" 
+                          value={editStreet} 
+                          onChange={e => setEditStreet(e.target.value)} 
+                          className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-200 outline-none" 
+                          placeholder="Calle, Número, Piso..." 
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-mono text-zinc-400 uppercase">Ciudad</label>
                           <input 
                             type="text" 
-                            value={editPhone} 
-                            onChange={e => setEditPhone(e.target.value)} 
-                            className="w-full bg-black border border-white/10 rounded-lg p-3 text-sm text-white font-mono outline-none focus:border-cyan-500" 
-                            placeholder="+1 234 567 890" 
+                            value={editCity} 
+                            onChange={e => setEditCity(e.target.value)} 
+                            className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-200 outline-none" 
+                            placeholder="Ciudad" 
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-mono text-zinc-400 uppercase">Código Postal</label>
+                          <input 
+                            type="text" 
+                            value={editZip} 
+                            onChange={e => setEditZip(e.target.value)} 
+                            className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-200 outline-none" 
+                            placeholder="38000" 
                           />
                         </div>
                       </div>
-                    </section>
-
-                    <section className="space-y-4">
-                      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Logistics Data (Address)</h3>
-                      <div className="space-y-3">
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-mono text-zinc-600 uppercase">Street / Address</label>
-                          <input 
-                            type="text" 
-                            value={editStreet} 
-                            onChange={e => setEditStreet(e.target.value)} 
-                            className="w-full bg-black border border-white/10 rounded-lg p-3 text-xs text-zinc-300 outline-none focus:border-cyan-500" 
-                            placeholder="Street name, Number, Suite..." 
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-[8px] font-mono text-zinc-600 uppercase">City</label>
-                            <input 
-                              type="text" 
-                              value={editCity} 
-                              onChange={e => setEditCity(e.target.value)} 
-                              className="w-full bg-black border border-white/10 rounded-lg p-3 text-xs text-zinc-300 outline-none focus:border-cyan-500" 
-                              placeholder="City" 
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[8px] font-mono text-zinc-600 uppercase">Zip Code</label>
-                            <input 
-                              type="text" 
-                              value={editZip} 
-                              onChange={e => setEditZip(e.target.value)} 
-                              className="w-full bg-black border border-white/10 rounded-lg p-3 text-xs text-zinc-300 outline-none focus:border-cyan-500" 
-                              placeholder="12345" 
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-mono text-zinc-600 uppercase">Country</label>
-                          <input 
-                            type="text" 
-                            value={editCountry} 
-                            onChange={e => setEditCountry(e.target.value)} 
-                            className="w-full bg-black border border-white/10 rounded-lg p-3 text-xs text-zinc-300 outline-none focus:border-cyan-500" 
-                            placeholder="Country" 
-                          />
-                        </div>
-                      </div>
-                    </section>
+                    </div>
                   </div>
                 )}
 
                 {activeConsoleTab === 'transactions' && (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-white/5 pb-2 flex items-center gap-2">
-                      <History className="w-4 h-4" /> Transaction History
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-800 pb-2">
+                      Historial de Pedidos
                     </h3>
 
                     {ordersLoading ? (
-                      <div className="py-12 flex flex-col items-center justify-center gap-4">
-                        <RefreshCw className="w-8 h-8 text-cyan-500 animate-spin" />
-                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-black">Syncing with Odoo...</p>
-                      </div>
+                      <p className="text-center py-8 text-xs text-zinc-500 font-bold uppercase tracking-wider">Cargando pedidos...</p>
                     ) : userOrders.length > 0 ? (
-                      <div className="space-y-3">
+                      <div className="space-y-2.5">
                         {userOrders.map((order) => (
-                          <div key={order.id} className="bg-black border border-white/5 rounded-xl p-4 hover:border-white/20 transition-all group/order">
-                            <div className="flex items-center justify-between mb-3">
-                              <span className="text-[10px] font-mono text-zinc-500 uppercase">ID: {order.id.split('-')[0]}</span>
-                              <span className={cn(
-                                "text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter shadow-[0_0_10px_rgba(0,0,0,0.5)]",
-                                order.status === 'paid' ? "bg-green-500/20 text-green-500 border border-green-500/30" : "bg-yellow-500/20 text-yellow-500 border border-yellow-500/30"
-                              )}>
-                                {order.status}
-                              </span>
+                          <div key={order.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-bold text-zinc-100">
+                                Pedido #{order.id.substring(0, 8)}
+                              </p>
+                              <p className="text-[10px] text-zinc-400 font-mono">
+                                {new Date(order.created_at).toLocaleDateString()}
+                              </p>
                             </div>
-                            <div className="flex items-end justify-between">
-                              <div>
-                                <p className="text-sm font-black text-white">${order.total_amount.toFixed(2)}</p>
-                                <p className="text-[10px] text-zinc-600 font-mono">{new Date(order.created_at).toLocaleDateString()}</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-[8px] text-zinc-700 uppercase font-bold">Admin Insights</p>
-                                <p className="text-[10px] text-green-500/50 font-mono">COGS: ${(order.total_amount * 0.7).toFixed(2)}</p>
-                              </div>
+                            <div className="text-right">
+                              <p className="text-xs font-black text-amber-400">{Number(order.total_amount).toFixed(2)}€</p>
+                              <span className="text-[9px] font-bold uppercase text-zinc-400">{order.status || 'Completado'}</span>
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="py-12 text-center bg-black/20 rounded-2xl border border-dashed border-white/5">
-                        <ShoppingCart className="w-8 h-8 text-zinc-800 mx-auto mb-3" />
-                        <p className="text-[10px] text-zinc-600 uppercase font-black">No transactions found</p>
-                      </div>
+                      <p className="text-center py-8 text-xs text-zinc-500 font-bold uppercase tracking-wider">Sin compras registradas</p>
                     )}
                   </div>
                 )}
 
               </div>
 
-              {/* Console Footer */}
-              <div className="p-6 border-t border-white/10 bg-black/60 backdrop-blur-md">
-                {isConfirmingEdit ? (
-                  <div className="space-y-3 animate-in fade-in zoom-in duration-200">
-                    <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
-                      <p className="text-xs font-bold text-red-400 flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4" /> CONFIRM OVERRIDE
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setIsConfirmingEdit(false)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-white uppercase tracking-widest transition-colors">Cancel</button>
-                      <button onClick={saveUserEdits} className="flex-1 py-3 bg-red-600 hover:bg-red-500 rounded-xl text-xs font-bold text-white uppercase tracking-widest shadow-[0_0_15px_rgba(220,38,38,0.4)] transition-colors">Execute</button>
-                    </div>
-                  </div>
-                ) : (
-                  <button 
-                    onClick={() => setIsConfirmingEdit(true)}
-                    className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-[0.2em] text-xs rounded-xl shadow-[0_0_20px_rgba(8,145,178,0.4)] transition-all flex items-center justify-center gap-2"
-                  >
-                    <Zap className="w-4 h-4" /> Initialize Rewrite
-                  </button>
-                )}
+              {/* Botón Guardar */}
+              <div className="p-6 border-t border-zinc-800 bg-zinc-900/60">
+                <button 
+                  onClick={saveUserEdits}
+                  className="w-full py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold uppercase tracking-wider text-xs rounded-xl border border-zinc-700 transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                  Guardar Cambios del Usuario
+                </button>
               </div>
             </motion.div>
           </>
@@ -1112,9 +1046,6 @@ export default function UsersEngine() {
         .custom-scrollbar::-webkit-scrollbar-thumb {
           background: rgba(255, 255, 255, 0.1);
           border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.2);
         }
       `}</style>
     </div>

@@ -102,7 +102,7 @@ serve(async (req) => {
             </div>
 
             <div class="footer">
-              Gracias por confiar en Sasori Labs & HoloCards
+              Gracias por confiar en Sasori Labs & HOLOCARDS
             </div>
           </div>
         </body>
@@ -110,7 +110,7 @@ serve(async (req) => {
       `;
     } else {
       // 1. Email for Customer (Reservado)
-      subject = `¡Tu pedido #${shortId} está reservado! Instrucciones de pago`;
+      subject = `¡Pedido Confirmado! #${shortId} - HOLOCARDS`;
       customerEmailHtml = `
         <!DOCTYPE html>
         <html>
@@ -140,7 +140,7 @@ serve(async (req) => {
             </div>
             <div class="status-badge">Pedido Reservado</div>
             <h1>¡Hola ${customer_name || 'Coleccionista'}!</h1>
-            <p>Tu pedido <strong>#${shortId}</strong> ha sido registrado con éxito en HoloCard Vault. Estamos listos para preparar tu envío en cuanto confirmemos el pago.</p>
+            <p>Hemos recibido correctamente tu pedido y ya está registrado en nuestro sistema. Estamos listos para preparar tu envío en cuanto confirmemos el pago.</p>
             
             <div class="order-details">
               <div class="detail-row">
@@ -167,7 +167,7 @@ serve(async (req) => {
             </div>
 
             <div class="footer">
-              Gracias por confiar en Sasori Labs & HoloCards
+              Gracias por confiar en Sasori Labs & HOLOCARDS
             </div>
           </div>
         </body>
@@ -192,7 +192,7 @@ serve(async (req) => {
 
     const emailsToSend = [
       {
-        from: "HoloCards <pedidos@sasorilabs.io>",
+        from: "HOLOCARDS <pedidos@sasorilabs.io>",
         to: customer_email,
         subject: subject,
         html: customerEmailHtml,
@@ -201,7 +201,7 @@ serve(async (req) => {
 
     if (toAdmin) {
       emailsToSend.push({
-        from: "HoloCard Vault <sistema@sasorilabs.io>",
+        from: "HOLOCARDS Vault <sistema@sasorilabs.io>",
         to: "amijares@sasorilabs.io",
         subject: `🚨 NUEVA VENTA - Pedido #${shortId}`,
         html: adminEmailHtml,

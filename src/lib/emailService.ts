@@ -22,14 +22,14 @@ const generateCustomerEmailTemplate = (data: OrderData) => {
   return `
     ------------------------------------------------------------
     PARA: ${data.customer_email}
-    ASUNTO: ¡Tu pedido #${shortId} está reservado! Instrucciones de pago
+    ASUNTO: ¡Pedido Confirmado! #${shortId} - HOLOCARDS
     ------------------------------------------------------------
     HTML TEMPLATE (Premium Dark Mode):
     
     <div style="background: #09090b; color: #fff; padding: 40px; font-family: sans-serif;">
-      <h1 style="color: #dc2626; font-style: italic;">HOLO CARDS</h1>
+      <h1 style="color: #dc2626; font-style: italic;">HOLOCARDS</h1>
       <p>Hola ${data.customer_name},</p>
-      <p>Tu pedido #${shortId} ha sido registrado con éxito.</p>
+      <p>Hemos recibido correctamente tu pedido y ya está registrado en nuestro sistema.</p>
       <div style="border: 1px solid #27272a; padding: 20px; border-radius: 12px;">
         <p><strong>Total:</strong> ${data.total_amount}</p>
         <p><strong>Envío:</strong> ${data.shipping_address}</p>

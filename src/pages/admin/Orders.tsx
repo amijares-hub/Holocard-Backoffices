@@ -296,13 +296,35 @@ export default function Orders() {
   };
 
   const handlePrint = () => {
+    if (!selectedOrder) return;
+    const shortId = selectedOrder.id.slice(0, 8).toUpperCase();
+    const originalTitle = document.title;
+    
+    // Asignar nombre dinámico basado en el número de pedido
+    document.title = `Albaran_${shortId}`;
+    
     window.print();
+
+    // Restaurar el título original
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1000);
   };
 
   return (
     <div className="space-y-6 pb-20 print:p-0">
       <style>{`
         @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+          body {
+            background: white !important;
+            color: black !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           body * {
             visibility: hidden;
           }
@@ -313,13 +335,21 @@ export default function Orders() {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100%;
+            width: 100% !important;
+            max-width: 100% !important;
+            box-shadow: none !important;
+            border: none !important;
             background: white !important;
             color: black !important;
-            padding: 40px !important;
           }
           .no-print {
             display: none !important;
+          }
+          .print-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-shadow: none !important;
+            border: none !important;
           }
           .glass, .bg-background, .bg-card {
             background: white !important;
@@ -330,10 +360,6 @@ export default function Orders() {
           }
           .text-red-600, .text-red-500 {
             color: #b91c1c !important;
-          }
-          @page {
-            size: auto;
-            margin: 0mm;
           }
         }
       `}</style>
@@ -559,22 +585,43 @@ export default function Orders() {
                   </button>
                 </div>
               </div>
-
               {/* Printable Header (Only visible on print) */}
-              <div className="hidden print:block printable-area">
+              <div className="hidden print:block printable-area print-container">
+                {/* ── Official Header ─────────────────────────────────────── */}
                 <div className="flex justify-between items-start mb-10 border-b-2 border-black pb-8">
-                  <div>
-                    <h1 className="text-4xl font-black uppercase italic tracking-tighter mb-2">HOLO<span className="text-red-600">CARDS</span></h1>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Bóveda Premium de Coleccionables</p>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 mt-1">Islas Canarias, España</p>
+                  {/* Sender: Logo + Fiscal Data */}
+                  <div className="flex items-start gap-4">
+                    <img
+                      src="/Imagenes/Logo%20de%20la%20empresa/logo%20Holocard.jpg"
+                      alt="HoloCards Logo"
+                      style={{ height: '60px', width: 'auto', objectFit: 'contain' }}
+                    />
+                    <div>
+                      <h1 className="text-2xl font-black uppercase italic tracking-tighter mb-1">
+                        Elisa González Rojas / HoloCards
+                      </h1>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+                        Ctra. Monte Las Mercedes, 127
+                      </p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+                        38293 San Cristóbal de La Laguna
+                      </p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+                        Santa Cruz de Tenerife, España
+                      </p>
+                    </div>
                   </div>
+                  {/* Document Title + Order Reference */}
                   <div className="text-right">
                     <h2 className="text-xl font-black uppercase mb-1">ALBARÁN DE ENTREGA</h2>
                     <p className="text-sm font-mono font-bold">ORDEN: #{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">Fecha: {new Date(selectedOrder.created_at).toLocaleDateString()}</p>
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">
+                      Fecha: {new Date(selectedOrder.created_at).toLocaleDateString('es-ES')}
+                    </p>
                   </div>
                 </div>
 
+                {/* ── Customer & Shipping ──────────────────────────────────── */}
                 <div className="grid grid-cols-2 gap-10 mb-10">
                   <div>
                     <h3 className="text-[10px] font-black uppercase tracking-widest mb-4 border-b border-black pb-1">DATOS DEL CLIENTE</h3>
@@ -583,25 +630,34 @@ export default function Orders() {
                   </div>
                   <div>
                     <h3 className="text-[10px] font-black uppercase tracking-widest mb-4 border-b border-black pb-1">DIRECCIÓN DE ENVÍO</h3>
-                    <p className="text-sm font-bold">{selectedOrder.shipping_address?.firstName || selectedOrder.shipping_address?.nombre || ''} {selectedOrder.shipping_address?.lastName || selectedOrder.shipping_address?.apellidos || ''}</p>
+                    <p className="text-sm font-bold">
+                      {selectedOrder.shipping_address?.firstName || selectedOrder.shipping_address?.nombre || ''}{' '}
+                      {selectedOrder.shipping_address?.lastName || selectedOrder.shipping_address?.apellidos || ''}
+                    </p>
                     <p className="text-sm">{selectedOrder.shipping_address?.address || selectedOrder.shipping_address?.direccion || ''}</p>
-                    <p className="text-sm font-bold uppercase tracking-widest">{selectedOrder.shipping_address?.zipCode || selectedOrder.shipping_address?.postalCode || selectedOrder.shipping_address?.cp || ''} {selectedOrder.shipping_address?.city || selectedOrder.shipping_address?.ciudad || ''}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-widest">{selectedOrder.shipping_address?.province || selectedOrder.shipping_address?.provincia || ''}</p>
+                    <p className="text-sm font-bold uppercase tracking-widest">
+                      {selectedOrder.shipping_address?.zipCode || selectedOrder.shipping_address?.postalCode || selectedOrder.shipping_address?.cp || ''}{' '}
+                      {selectedOrder.shipping_address?.city || selectedOrder.shipping_address?.ciudad || ''}
+                    </p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest">
+                      {selectedOrder.shipping_address?.province || selectedOrder.shipping_address?.provincia || ''}
+                    </p>
                   </div>
                 </div>
 
+                {/* ── Line Items Table ─────────────────────────────────────── */}
                 <table className="w-full text-left mb-10">
                   <thead>
                     <tr className="border-b-2 border-black">
                       <th className="py-2 text-[10px] font-black uppercase tracking-widest">PRODUCTO</th>
                       <th className="py-2 text-[10px] font-black uppercase tracking-widest text-center">CANT.</th>
-                      <th className="py-2 text-[10px] font-black uppercase tracking-widest text-right">PRECIO</th>
+                      <th className="py-2 text-[10px] font-black uppercase tracking-widest text-right">PRECIO UNIT.</th>
                       <th className="py-2 text-[10px] font-black uppercase tracking-widest text-right">SUBTOTAL</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-200">
                     {selectedOrder.order_items?.map((item) => (
-                      <tr key={item.id} className="py-4">
+                      <tr key={item.id}>
                         <td className="py-4">
                           <p className="text-sm font-bold uppercase">{item.products?.name}</p>
                         </td>
@@ -612,16 +668,34 @@ export default function Orders() {
                     ))}
                   </tbody>
                   <tfoot>
+                    {/* Canary Islands Tax Exemption Row */}
+                    <tr className="border-t border-zinc-300">
+                      <td colSpan={3} className="py-2 text-right text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                        IVA / IGIC
+                      </td>
+                      <td className="py-2 text-right text-sm font-black text-zinc-500">
+                        0% — Exento
+                      </td>
+                    </tr>
                     <tr className="border-t-2 border-black">
-                      <td colSpan={3} className="py-4 text-right text-[10px] font-black uppercase tracking-widest">Total del Pedido</td>
-                      <td className="py-4 text-right text-2xl font-black italic">€{Number(selectedOrder.total_amount).toFixed(2)}</td>
+                      <td colSpan={3} className="py-4 text-right text-[10px] font-black uppercase tracking-widest">
+                        TOTAL DEL PEDIDO
+                      </td>
+                      <td className="py-4 text-right text-2xl font-black italic">
+                        €{Number(selectedOrder.total_amount).toFixed(2)}
+                      </td>
                     </tr>
                   </tfoot>
                 </table>
 
-                <div className="mt-20 pt-10 border-t border-zinc-200 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 italic">Gracias por su compra en HoloCards</p>
-                  <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest mt-2">Documento generado automáticamente por el sistema de gestión HoloCard Vault.</p>
+                {/* ── Legal Footer ─────────────────────────────────────────── */}
+                <div className="mt-16 pt-8 border-t border-zinc-300">
+                  <p className="text-[9px] font-bold text-zinc-500 italic text-center leading-relaxed">
+                    Exención Franquicia Fiscal, Ley 7/2017, de 27 de diciembre, de Presupuestos Generales de la Comunidad Autónoma de Canarias.
+                  </p>
+                  <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest mt-3 text-center">
+                    Documento generado automáticamente · HoloCards — Bóveda Premium de Coleccionables
+                  </p>
                 </div>
               </div>
 

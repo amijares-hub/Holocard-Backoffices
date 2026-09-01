@@ -127,9 +127,10 @@ export default function POS() {
   };
 
   // ── Totals ─────────────────────────────────────────────────────────────────
+  // Canarias — Exención Franquicia Fiscal (Ley 7/2017): 0% IGIC
   const subtotal = cart.reduce((acc, i) => acc + i.base_price * i.qty, 0);
-  const tax = subtotal * 0.08;
-  const total = subtotal + tax;
+  const tax = 0; // 0% exento
+  const total = subtotal; // sin recargo fiscal
 
   // ── Filtered inventory ─────────────────────────────────────────────────────
   const filteredInventory = inventory.filter((i) => {
@@ -370,8 +371,8 @@ export default function POS() {
               <span className="font-mono">{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-zinc-500">Tax (8%)</span>
-              <span className="font-mono">{formatCurrency(tax)}</span>
+              <span className="text-zinc-500">IGIC: 0% Exento</span>
+              <span className="font-mono text-zinc-500">{formatCurrency(tax)}</span>
             </div>
             <div className="flex justify-between text-xl font-bold pt-2 border-t border-white/5">
               <span className="italic">Total</span>

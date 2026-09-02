@@ -1,14 +1,14 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { 
-  X, 
-  Printer, 
-  QrCode, 
-  CheckCircle2, 
-  AlertCircle, 
-  Loader2, 
-  Package 
+import {
+  X,
+  Printer,
+  QrCode,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Package
 } from "lucide-react"
 import { supabase } from "../../lib/supabase"
 
@@ -217,7 +217,7 @@ export function CorreosLabelModal({ order, isOpen, onClose, onSuccess }: Correos
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
       <div className="bg-[#0a1628] border border-white/10 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative flex flex-col gap-5">
-        
+
         <div className="flex items-center justify-between border-b border-white/10 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-yellow-400/10 text-yellow-400 border border-yellow-400/20">
@@ -228,7 +228,7 @@ export function CorreosLabelModal({ order, isOpen, onClose, onSuccess }: Correos
               <p className="text-xs text-gray-400 font-mono">Pedido #{order.id.slice(0, 8)}</p>
             </div>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
           >
@@ -255,9 +255,9 @@ export function CorreosLabelModal({ order, isOpen, onClose, onSuccess }: Correos
           ) : qrCodeBase64 ? (
             <div className="flex flex-col items-center gap-3 animate-in fade-in zoom-in duration-300">
               <div className="p-3 bg-white rounded-2xl shadow-xl border-2 border-yellow-400">
-                <img 
-                  src={`data:image/svg+xml;base64,${qrCodeBase64}`} 
-                  alt="Código QR Prerregistro Correos" 
+                <img
+                  src={`data:image/svg+xml;base64,${qrCodeBase64}`}
+                  alt="Código QR Prerregistro Correos"
                   className="w-48 h-48 object-contain"
                 />
               </div>

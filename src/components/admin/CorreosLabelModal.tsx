@@ -40,7 +40,6 @@ export function CorreosLabelModal({ order, isOpen, onClose, onSuccess }: Correos
   const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(order?.shipping_label_qr || null)
   const [shipmentCode, setShipmentCode] = useState<string | null>(order?.tracking_number || null)
 
-  // Re-sincroniza el estado local cuando cambia la orden seleccionada
   useEffect(() => {
     if (order) {
       setQrCodeBase64(order.shipping_label_qr || null)
@@ -198,7 +197,6 @@ export function CorreosLabelModal({ order, isOpen, onClose, onSuccess }: Correos
               <p>${addr.zip} ${addr.city.toUpperCase()}</p>
               <p>${addr.province.toUpperCase()}</p>
               <p>TEL: ${addr.phone}</p>
-              <p>EMAIL: ${addr.email}</p>
             </div>
 
             <div class="qr-container">

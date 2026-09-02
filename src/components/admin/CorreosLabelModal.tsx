@@ -114,7 +114,7 @@ export function CorreosLabelModal({ order, isOpen, onClose, onSuccess }: Correos
     } catch (err: any) {
       console.error("Error al generar la etiqueta:", err)
       setError(err.message || "Fallo en la comunicación con Correos API")
-    } fontally {
+    } finally {
       setLoading(false)
     }
   }

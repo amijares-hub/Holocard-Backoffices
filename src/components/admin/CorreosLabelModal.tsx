@@ -145,8 +145,8 @@ export function CorreosLabelModal({ order, isOpen, onClose, onSuccess }: Correos
             .label-box {
               border: 3px solid #000;
               border-radius: 12px;
-              padding: 20px;
-              width: 340px;
+              padding: 16px;
+              width: 350px;
               box-sizing: border-box;
             }
             .header-banner {
@@ -154,17 +154,17 @@ export function CorreosLabelModal({ order, isOpen, onClose, onSuccess }: Correos
               justify-content: space-between;
               align-items: center;
               border-bottom: 2px solid #000;
-              padding-bottom: 8px;
-              margin-bottom: 12px;
+              padding-bottom: 6px;
+              margin-bottom: 10px;
             }
             .brand-main { font-weight: 900; font-size: 22px; letter-spacing: 1px; }
             .service-tag { background: #000; color: #fff; padding: 2px 6px; font-size: 10px; font-weight: bold; }
-            .section { border-bottom: 1px solid #ccc; padding-bottom: 8px; margin-bottom: 8px; text-align: left; }
+            .section { border-bottom: 1px solid #ccc; padding-bottom: 6px; margin-bottom: 6px; text-align: left; }
             .section-title { font-size: 9px; font-weight: bold; color: #555; text-transform: uppercase; margin: 0 0 2px 0; }
-            .sender-title { font-size: 14px; font-weight: 900; margin: 0 0 2px 0; }
+            .sender-title { font-size: 13px; font-weight: 900; margin: 0 0 2px 0; }
             p { margin: 2px 0; font-size: 11px; font-weight: 600; }
-            .qr-container { text-align: center; margin: 12px 0; }
-            .qr-image { width: 205px; height: 205px; }
+            .qr-container { text-align: center; margin: 10px 0; }
+            .qr-image { width: 260px; height: 260px; }
             .tracking-box { 
               border: 2px solid #000; 
               padding: 6px; 
@@ -244,7 +244,7 @@ export function CorreosLabelModal({ order, isOpen, onClose, onSuccess }: Correos
           <p className="text-gray-400">Teléfono: {addr.phone}</p>
         </div>
 
-        <div className="flex flex-col items-center justify-center bg-[#030c1a] border border-white/5 rounded-2xl p-6 min-h-[260px] text-center">
+        <div className="flex flex-col items-center justify-center bg-[#030c1a] border border-white/5 rounded-2xl p-6 min-h-[280px] text-center">
           {loading ? (
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="w-10 h-10 text-yellow-400 animate-spin" />
@@ -258,7 +258,7 @@ export function CorreosLabelModal({ order, isOpen, onClose, onSuccess }: Correos
                 <img 
                   src={`data:image/svg+xml;base64,${qrCodeBase64}`} 
                   alt="Código QR Prerregistro Correos" 
-                  className="w-52 h-52 object-contain"
+                  className="w-64 h-64 object-contain"
                 />
               </div>
 

@@ -1,52 +1,58 @@
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import Stripe from 'https://esm.sh/stripe@14.18.0?target=deno'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
-  apiVersion: '2023-10-16',
-  httpClient: Stripe.createFetchHttpClient(),
-})
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+const CORREOS_CONFIG = {
+  contractNumber: "54099640",
+  clientNumber: "9981628805",
+  labellerCode: "DH4T",
+  clientId: "cc524d7f312f422eb0abe4ef288cccea",
+  defaultProduct: "PAFXB",
+  defaultDeliveryMethod: "DOUAOF"
+};
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
-
   try {
-    const { amount, currency = 'eur' } = await req.json()
+    const { recipient, parcel, productCode, deliveryMethod } = await req.json();
 
-    if (!amount) {
-      throw new Error('El campo amount es requerido')
-    }
-
-    // Crea el PaymentIntent. automatic_payment_methods habilita Bizum, Apple Pay, etc.
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: amount,
-      currency: currency,
-      automatic_payment_methods: {
-        enabled: true,
+    const payload = {
+      contractNumber: CORREOS_CONFIG.contractNumber,
+      clientNumber: CORREOS_CONFIG.clientNumber,
+      labellerCode: CORREOS_CONFIG.labellerCode,
+      product: productCode || CORREOS_CONFIG.defaultProduct,
+      deliveryMethod: deliveryMethod || CORREOS_CONFIG.defaultDeliveryMethod,
+      
+      sender: {
+        name: "HoloCards Canarias",
+        street: "CTRA Monte Las Mercedes N127",
+        city: "La Laguna",
+        zipCode: "38293",
+        province: "Santa Cruz de Tenerife",
+        phone: "626119815",
+        email: "soporte@holocardscanarias.com"
       },
-    })
+      recipient,
+      parcel
+    };
 
-    return new Response(
-      JSON.stringify({ clientSecret: paymentIntent.client_secret }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
-    )
+    const response = await fetch("https://apis.correos.es/preregister/v1/shipments", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Client-Id": CORREOS_CONFIG.clientId,
+        "Authorization": `Bearer ${Deno.env.get("CORREOS_API_SECRET") || ""}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+
+    return new Response(JSON.stringify(result), {
+      status: response.status,
+      headers: { "Content-Type": "application/json" }
+    });
   } catch (error: any) {
-    console.error('Error al crear PaymentIntent:', error)
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      }
-    )
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
   }
-})
+});

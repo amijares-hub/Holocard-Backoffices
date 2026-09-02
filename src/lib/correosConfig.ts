@@ -1,99 +1,70 @@
-/**
- * correosConfig.ts
- * ─────────────────────────────────────────────────────────────────────────────
- * Configuración tipada y segura para la integración con la API oficial de
- * Correos España. Las credenciales se leen del entorno (Supabase Secrets /
- * .env local). Las credenciales NUNCA deben hardcodearse en el código.
- *
- * ⚠️  Este módulo es importable desde Edge Functions (Deno) y desde el bundle
- *     Vite (Node/Browser). El acceso a process.env está protegido para evitar
- *     ReferenceError en entornos que no lo provean.
- * ─────────────────────────────────────────────────────────────────────────────
- */
+export type ShippingServiceType = 
+  | 'paq_ligero' 
+  | 'estandar_domicilio' 
+  | 'estandar_oficina' 
+  | 'estandar_citypaq' 
+  | 'premium_domicilio' 
+  | 'premium_oficina'
+  | 'today_domicilio';
 
-/** Lectura segura de variables de entorno compatible con Node, Deno y Browser */
-function getEnvVar(key: string): string {
-  // Deno / Node (Edge Functions de Supabase, scripts de servidor)
-  if (typeof process !== "undefined" && process.env?.[key]) {
-    return process.env[key] as string;
-  }
-  // Vite browser bundle (variables VITE_ expuestas en import.meta.env)
-  if (typeof import.meta !== "undefined" && (import.meta as unknown as Record<string, unknown>).env) {
-    const viteEnv = (import.meta as unknown as { env: Record<string, string | undefined> }).env;
-    if (viteEnv[key]) return viteEnv[key] as string;
-    const viteKey = `VITE_${key}`;
-    if (viteEnv[viteKey]) return viteEnv[viteKey] as string;
-  }
-  return "";
-}
+export const CORREOS_CONFIG = {
+  // Datos del Contrato y Cliente
+  contractNumber: "54099640",
+  clientNumber: "9981628805",
+  labellerCode: "DH4T",
+  clientId: "cc524d7f312f422eb0abe4ef288cccea",
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipado del objeto de configuración
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface CorreosSenderConfig {
-  name: string;
-  address: string;
-  postalCode: string;
-  city: string;
-  province: string;
-  phone: string;
-  email: string;
-}
-
-export interface CorreosConfig {
-  contractNumber: string;
-  clientNumber: string;
-  etagCode: string;
-  clientId: string;
-  clientSecret: string;
-  apiUrl: string;
-  sender: CorreosSenderConfig;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Configuración exportada
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const CORREOS_CONFIG: CorreosConfig = {
-  contractNumber: getEnvVar("CORREOS_CONTRACT_NUMBER"),
-  clientNumber:   getEnvVar("CORREOS_CLIENT_NUMBER"),
-  etagCode:       getEnvVar("CORREOS_ETAG_CODE"),
-  clientId:       getEnvVar("CORREOS_CLIENT_ID"),
-  clientSecret:   getEnvVar("CORREOS_CLIENT_SECRET"),
-  apiUrl:         getEnvVar("CORREOS_API_URL") || "https://api.correos.es",
-
-  /** Datos de origen fijos para los envíos desde Canarias */
-  sender: {
-    name:       "HOLOCARDS",
-    address:    "Ctra. Monte Las Mercedes, 127",
-    postalCode: "38293",
-    city:       "San Cristóbal de La Laguna",
-    province:   "Santa Cruz de Tenerife",
-    phone:      "626119815",
-    email:      "soporte@holocardscanarias.com",
+  // Catálogo completo de Productos y Modalidades
+  products: {
+    paq_ligero: {
+      code: "PAGXC",
+      deliveryMethod: "BUUAOF",
+      description: "Paq Ligero (Buzón)",
+      maxWeightGrams: 2000
+    },
+    estandar_domicilio: {
+      code: "PAFXB",
+      deliveryMethod: "DOUAOF",
+      description: "Paq Estándar Domicilio",
+      maxWeightGrams: 40000
+    },
+    estandar_oficina: {
+      code: "PAFXB",
+      deliveryMethod: "OFUAOF",
+      description: "Paq Estándar Entrega en Oficina",
+      maxWeightGrams: 40000
+    },
+    estandar_citypaq: {
+      code: "PAFXB",
+      deliveryMethod: "CIUAOF",
+      description: "Paq Estándar Citypaq",
+      maxWeightGrams: 40000
+    },
+    premium_domicilio: {
+      code: "PADXA",
+      deliveryMethod: "DOUAOF",
+      description: "Paq Premium Domicilio",
+      maxWeightGrams: 40000
+    },
+    premium_oficina: {
+      code: "PADXA",
+      deliveryMethod: "OFUAOF",
+      description: "Paq Premium Entrega en Oficina",
+      maxWeightGrams: 40000
+    },
+    today_domicilio: {
+      code: "PAAZF",
+      deliveryMethod: "DOUAOF",
+      description: "Paq Today Domicilio",
+      maxWeightGrams: 5000
+    }
   },
-} as const;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Utilidades de validación
-// ─────────────────────────────────────────────────────────────────────────────
+  // Valores por defecto
+  defaultService: 'estandar_domicilio' as ShippingServiceType,
 
-/**
- * Valida que todas las credenciales requeridas estén presentes y no vacías.
- * Útil para hacer un early-exit en Edge Functions antes de invocar la API.
- */
-export function validateCorreosConfig(): boolean {
-  const requiredFields: (keyof Omit<CorreosConfig, "sender" | "apiUrl">)[] = [
-    "contractNumber",
-    "clientNumber",
-    "etagCode",
-    "clientId",
-    "clientSecret",
-  ];
-
-  return requiredFields.every((key) => {
-    const value = CORREOS_CONFIG[key];
-    return typeof value === "string" && value.trim().length > 0;
-  });
-}
+  endpoints: {
+    token: "https://apis.correos.es/token/v1",
+    preregister: "https://apis.correos.es/preregister/v1/shipments"
+  }
+};

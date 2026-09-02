@@ -16,8 +16,10 @@ import {
   Calendar,
   Loader2,
   Printer,
-  Trash2
+  Trash2,
+  QrCode
 } from 'lucide-react';
+import CorreosLabelModal from '../../components/admin/CorreosLabelModal';
 import { supabase } from '../../lib/supabase';
 import { cn, formatCurrency } from '../../lib/utils';
 
@@ -40,6 +42,7 @@ interface Order {
   total_amount: number;
   status: 'pending' | 'paid' | 'shipped' | 'cancelled';
   tracking_number?: string;
+  shipping_label_qr?: string;
   created_at: string;
   order_items?: OrderItem[];
 }
@@ -61,6 +64,8 @@ export default function Orders() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [ordersToDelete, setOrdersToDelete] = useState<string[]>([]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [correosOrder, setCorreosOrder] = useState<Order | null>(null);
+  const [isCorreosModalOpen, setIsCorreosModalOpen] = useState(false);
 
   // Stats
   const [stats, setStats] = useState({
@@ -528,6 +533,18 @@ export default function Orders() {
                         <p className="font-mono font-black text-foreground italic text-lg transition-colors">
                           {formatCurrency(order.total_amount)}
                         </p>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCorreosOrder(order);
+                            setIsCorreosModalOpen(true);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-yellow-400/10 hover:bg-yellow-400/20 border border-yellow-400/20 text-yellow-400 transition-all text-[9px] font-black uppercase tracking-widest"
+                          title={order.shipping_label_qr ? 'Ver QR Correos' : 'Generar QR Correos'}
+                        >
+                          <QrCode className="w-3.5 h-3.5" />
+                          <span className="hidden xl:inline">{order.shipping_label_qr ? 'Ver QR' : 'QR Correos'}</span>
+                        </button>
                         <button 
                           onClick={(e) => { e.stopPropagation(); initiateDelete([order.id]); }}
                           className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -870,6 +887,18 @@ export default function Orders() {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Correos Label Modal */}
+      <CorreosLabelModal
+        order={correosOrder}
+        isOpen={isCorreosModalOpen}
+        onClose={() => {
+          setIsCorreosModalOpen(false);
+          setCorreosOrder(null);
+        }}
+        onSuccess={() => {
+          fetchOrders();
+        }}
+      />
     </div>
   );
 }

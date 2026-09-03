@@ -12,6 +12,8 @@ import {
 } from "lucide-react"
 import { supabase } from "../../lib/supabase"
 
+const LOGO_ALBARAN_BLANCO = "https://dopieoflkqfalnuvpwch.supabase.co/storage/v1/object/public/Recursos%20Visuales%20Disenador/Logotipos/Isologo%20fondo%20blanco.png";
+
 interface OrderData {
   id: string
   customer_name?: string
@@ -154,10 +156,10 @@ export function CorreosLabelModal({ order, isOpen, onClose, onSuccess }: Correos
               justify-content: space-between;
               align-items: center;
               border-bottom: 2px solid #000;
-              padding-bottom: 6px;
+              padding-bottom: 8px;
               margin-bottom: 10px;
             }
-            .brand-main { font-weight: 900; font-size: 22px; letter-spacing: 1px; }
+            .brand-logo { height: 38px; width: auto; object-fit: contain; }
             .service-tag { background: #000; color: #fff; padding: 2px 6px; font-size: 10px; font-weight: bold; }
             .section { border-bottom: 1px solid #ccc; padding-bottom: 6px; margin-bottom: 6px; text-align: left; }
             .section-title { font-size: 9px; font-weight: bold; color: #555; text-transform: uppercase; margin: 0 0 2px 0; }
@@ -178,7 +180,7 @@ export function CorreosLabelModal({ order, isOpen, onClose, onSuccess }: Correos
         <body>
           <div class="label-box">
             <div class="header-banner">
-              <span class="brand-main">HOLOCARDS</span>
+              <img src="${LOGO_ALBARAN_BLANCO}" alt="HOLOCARDS" class="brand-logo" />
               <span class="service-tag">CORREOS</span>
             </div>
 

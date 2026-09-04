@@ -34,7 +34,8 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
     tags: [] as string[],
     top_hits_images: [] as string[],
     language: '',
-    description: ''
+    description: '',
+    content: ''
   });
 
   const { games, categories, expansions, fetchTaxonomy } = useTaxonomyStore();
@@ -60,7 +61,8 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
           tags: [], 
           top_hits_images: product.top_hits_images || [],
           language: product.language || '',
-          description: product.description || ''
+          description: product.description || '',
+          content: product.content || ''
         });
         fetchProductTags(product.id);
       } else {
@@ -77,7 +79,8 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
           tags: [],
           top_hits_images: [],
           language: '',
-          description: ''
+          description: '',
+          content: ''
         });
       }
     }
@@ -127,11 +130,9 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
     const tag = tagInput.trim().toUpperCase();
     if (!tag || formData.tags.includes(tag)) return;
 
-    // 1. Añadir al formulario de inmediato
     setFormData(prev => ({ ...prev, tags: [...prev.tags, tag] }));
     setTagInput('');
 
-    // 2. Si no existe aún en la BD, crear la colección inline
     const existsInDB = availableTags.some(t => t.name === tag);
     if (!existsInDB && supabase) {
       setCreatingTag(true);
@@ -149,7 +150,6 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
           ]);
         }
       } catch (_) {
-        // Ya existe — obtenemos su ID para actualizar la lista de sugerencias
         try {
           const { data: existingCol } = await supabase
             .from('collections')
@@ -181,9 +181,6 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
     try {
       if (!supabase) throw new Error("Conexión con Supabase no disponible");
 
-      console.log("Submitting product with tags:", formData.tags);
-
-      // 🔴 PAYLOAD SEGURO Y LIMPIO: Sin el campo inexistente 'collection'
       const payload: any = {
         name: formData.name,
         sku: formData.sku || null,
@@ -194,7 +191,8 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
         game_id: formData.game_id || null,
         expansion_id: formData.expansion_id || null,
         language: formData.language || null,
-        description: formData.description || null
+        description: formData.description || null,
+        content: formData.content || null
       };
 
       if (formData.category_id) {
@@ -223,15 +221,12 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
       const finalProductId = product?.id || result.data?.[0]?.id;
 
       if (finalProductId) {
-        console.log("Saving tags for product:", finalProductId, "Tags:", formData.tags);
-        // Limpiar vinculaciones en product_collections
         try {
           await supabase.from('product_collections').delete().eq('product_id', finalProductId);
         } catch (e) {
           console.warn("Limpieza relacional:", e);
         }
         
-        // Sincronizar etiquetas con 'collections' y 'product_collections'
         for (const rawTag of formData.tags) {
           const cleanTag = rawTag.trim().toUpperCase();
           if (!cleanTag) continue;
@@ -245,9 +240,8 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
 
           if (existingCol?.id) {
             collectionId = String(existingCol.id);
-            console.log("Found existing collection:", cleanTag, "ID:", collectionId);
           } else {
-            const { data: newCol, error: newColErr } = await supabase
+            const { data: newCol } = await supabase
               .from('collections')
               .insert([{ name: cleanTag }])
               .select('id')
@@ -255,23 +249,14 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
 
             if (newCol?.id) {
               collectionId = String(newCol.id);
-              console.log("Created new collection:", cleanTag, "ID:", collectionId);
-            } else {
-              console.error("Failed to create collection:", cleanTag, newColErr);
             }
           }
 
           if (collectionId) {
             try {
-              console.log("Inserting into product_collections -> product_id:", finalProductId, "collection_id:", collectionId);
-              const res = await supabase
+              await supabase
                 .from('product_collections')
                 .insert([{ product_id: finalProductId, collection_id: collectionId }]);
-              if (res.error) {
-                console.error("Error inserting into product_collections:", res.error);
-              } else {
-                console.log("Successfully inserted into product_collections!");
-              }
             } catch (e) {
               console.error("Exception inserting into product_collections:", e);
             }
@@ -460,8 +445,9 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                     </div>
                   </div>
 
+                  {/* DESCRIPCIÓN DEL PRODUCTO */}
                   <div className="flex flex-col gap-1.5 md:col-span-3 mt-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-yellow-400">
                       Descripción del Producto (Texto al girar la carta)
                     </label>
                     <textarea
@@ -470,6 +456,20 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                       value={formData.description || ''}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       className="w-full bg-[#030c1a] border border-white/10 rounded-2xl p-3 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-yellow-400"
+                    />
+                  </div>
+
+                  {/* CONTENIDO DEL PRODUCTO */}
+                  <div className="flex flex-col gap-1.5 md:col-span-3 mt-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">
+                      Contenido del Producto (Ej: 10 Sobres, 1 Carta Promo, Dados...)
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Especifica exactamente qué incluye este paquete, caja o sobre..."
+                      value={formData.content || ''}
+                      onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                      className="w-full bg-[#030c1a] border border-white/10 rounded-2xl p-3 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400"
                     />
                   </div>
                 </div>

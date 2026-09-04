@@ -9,7 +9,6 @@ import {
 import { cn } from '../../lib/utils';
 import { ProductFormModal } from './ProductFormModal';
 
-// Definimos la interfaz basada en la base de datos
 interface Product {
   id: string;
   name: string;
@@ -27,6 +26,7 @@ interface Product {
   language?: string;
   top_hits_images?: string[];
   description?: string | null;
+  content?: string | null; // <--- VINCULADO
   categories?: { name: string };
 }
 
@@ -35,12 +35,10 @@ export const InventoryList = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // Función para cargar los productos
   const fetchProducts = async () => {
     setLoading(true);
     try {
@@ -48,7 +46,8 @@ export const InventoryList = () => {
         .from('products')
         .select(`
           id, name, sku, status, image_url, base_price, base_stock,
-          category_id, game_id, expansion_id, language, top_hits_images, description,
+          category_id, game_id, expansion_id, language, top_hits_images, 
+          description, content,
           categories ( name )
         `)
         .order('created_at', { ascending: false });
@@ -76,7 +75,6 @@ export const InventoryList = () => {
     return counts;
   }, [products]);
 
-  // Filtrado en tiempo real por búsqueda
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -117,7 +115,6 @@ export const InventoryList = () => {
 
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto p-6">
-      {/* HEADER Y CONTROLES */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-black text-foreground tracking-tight">Inventario Maestro</h2>
@@ -197,7 +194,6 @@ export const InventoryList = () => {
         languageCounts={languageCounts}
       />
 
-      {/* DATA GRID (TABLA) */}
       <div className="bg-card/50 border border-border rounded-2xl overflow-hidden backdrop-blur-xl transition-colors">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -294,17 +290,17 @@ export const InventoryList = () => {
                     <td className="p-4 text-right">
                       <span className={cn(
                         "text-sm font-mono font-bold",
-                        (product.base_stock || product.stock || 0) === 0 ? "text-red-500" :
-                          (product.base_stock || product.stock || 0) < 10 ? "text-amber-500" : "text-emerald-500"
+                        (product.base_stock || product.stock || 0) === 0 ? "text-red-500" : 
+                        (product.base_stock || product.stock || 0) < 10 ? "text-amber-500" : "text-emerald-500"
                       )}>
                         {product.base_stock || product.stock || 0}
                       </span>
                     </td>
                     <td className="p-4 text-center">
-                      {product.status === 'active' && <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full"><CheckCircle2 className="w-3 h-3" /> Activo</span>}
-                      {product.status === 'coming_soon' && <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-400 bg-blue-400/10 px-2 py-1 rounded-full border border-blue-500/20"><Clock className="w-3 h-3" /> Próximamente</span>}
-                      {product.status === 'draft' && <span className="inline-flex items-center gap-1 text-xs font-medium text-zinc-400 bg-zinc-400/10 px-2 py-1 rounded-full"><AlertCircle className="w-3 h-3" /> Borrador</span>}
-                      {product.status === 'archived' && <span className="inline-flex items-center gap-1 text-xs font-medium text-red-400 bg-red-400/10 px-2 py-1 rounded-full"><AlertCircle className="w-3 h-3" /> Archivado</span>}
+                      {product.status === 'active' && <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full"><CheckCircle2 className="w-3 h-3"/> Activo</span>}
+                      {product.status === 'coming_soon' && <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-400 bg-blue-400/10 px-2 py-1 rounded-full border border-blue-500/20"><Clock className="w-3 h-3"/> Próximamente</span>}
+                      {product.status === 'draft' && <span className="inline-flex items-center gap-1 text-xs font-medium text-zinc-400 bg-zinc-400/10 px-2 py-1 rounded-full"><AlertCircle className="w-3 h-3"/> Borrador</span>}
+                      {product.status === 'archived' && <span className="inline-flex items-center gap-1 text-xs font-medium text-red-400 bg-red-400/10 px-2 py-1 rounded-full"><AlertCircle className="w-3 h-3"/> Archivado</span>}
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1">

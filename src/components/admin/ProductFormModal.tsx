@@ -33,7 +33,8 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
     expansion_id: '',
     tags: [] as string[],
     top_hits_images: [] as string[],
-    language: ''
+    language: '',
+    description: ''
   });
 
   const { games, categories, expansions, fetchTaxonomy } = useTaxonomyStore();
@@ -58,7 +59,8 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
           expansion_id: product.expansion_id || '',
           tags: [], 
           top_hits_images: product.top_hits_images || [],
-          language: product.language || ''
+          language: product.language || '',
+          description: product.description || ''
         });
         fetchProductTags(product.id);
       } else {
@@ -74,7 +76,8 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
           expansion_id: '',
           tags: [],
           top_hits_images: [],
-          language: ''
+          language: '',
+          description: ''
         });
       }
     }
@@ -190,7 +193,8 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
         image_url: formData.image_url || null,
         game_id: formData.game_id || null,
         expansion_id: formData.expansion_id || null,
-        language: formData.language || null
+        language: formData.language || null,
+        description: formData.description || null
       };
 
       if (formData.category_id) {
@@ -454,6 +458,19 @@ export const ProductFormModal = ({ isOpen, onClose, onSuccess, product }: Produc
                         </select>
                       </div>
                     </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 md:col-span-3 mt-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                      Descripción del Producto (Texto al girar la carta)
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Escribe aquí los detalles del producto que el cliente verá en el reverso..."
+                      value={formData.description || ''}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      className="w-full bg-[#030c1a] border border-white/10 rounded-2xl p-3 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-yellow-400"
+                    />
                   </div>
                 </div>
               </div>

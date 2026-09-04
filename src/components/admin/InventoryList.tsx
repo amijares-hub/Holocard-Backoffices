@@ -9,23 +9,24 @@ import {
 import { cn } from '../../lib/utils';
 import { ProductFormModal } from './ProductFormModal';
 
-// Definimos la interfaz basada en la nueva base de datos
+// Definimos la interfaz basada en la base de datos
 interface Product {
   id: string;
   name: string;
   sku: string;
   price?: number;
   stock?: number;
-  base_price?: number; // Legacy/Future support
-  base_stock?: number; // Legacy/Future support
+  base_price?: number;
+  base_stock?: number;
   status: 'active' | 'draft' | 'archived' | 'coming_soon';
   main_image?: string | null;
   image_url?: string | null;
-  category_id?: string; // Fuga sellada
-  game_id?: string;     // Fuga sellada
-  expansion_id?: string;// Fuga sellada
-  language?: string;    // Fuga sellada
-  top_hits_images?: string[]; // Fuga sellada
+  category_id?: string;
+  game_id?: string;
+  expansion_id?: string;
+  language?: string;
+  top_hits_images?: string[];
+  description?: string | null;
   categories?: { name: string };
 }
 
@@ -39,7 +40,7 @@ export const InventoryList = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // Función para cargar los productos y su categoría relacionada
+  // Función para cargar los productos
   const fetchProducts = async () => {
     setLoading(true);
     try {
@@ -47,7 +48,7 @@ export const InventoryList = () => {
         .from('products')
         .select(`
           id, name, sku, status, image_url, base_price, base_stock,
-          category_id, game_id, expansion_id, language, top_hits_images,
+          category_id, game_id, expansion_id, language, top_hits_images, description,
           categories ( name )
         `)
         .order('created_at', { ascending: false });
@@ -280,7 +281,6 @@ export const InventoryList = () => {
                           <Tag className="w-3 h-3" />
                           {product.categories?.name || 'Sin Categoría'}
                         </span>
-                        {/* Nuevo: Muestra el idioma debajo de la categoría */}
                         {product.language && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-muted text-[9px] font-bold text-muted-foreground uppercase tracking-widest border border-border">
                             Idioma: {product.language}
@@ -294,18 +294,17 @@ export const InventoryList = () => {
                     <td className="p-4 text-right">
                       <span className={cn(
                         "text-sm font-mono font-bold",
-                        (product.base_stock || product.stock || 0) === 0 ? "text-red-500" : 
-                        (product.base_stock || product.stock || 0) < 10 ? "text-amber-500" : "text-emerald-500"
+                        (product.base_stock || product.stock || 0) === 0 ? "text-red-500" :
+                          (product.base_stock || product.stock || 0) < 10 ? "text-amber-500" : "text-emerald-500"
                       )}>
                         {product.base_stock || product.stock || 0}
                       </span>
                     </td>
                     <td className="p-4 text-center">
-                      {/* Actualizado: Renderiza los colores según el estado, incluyendo el nuevo */}
-                      {product.status === 'active' && <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full"><CheckCircle2 className="w-3 h-3"/> Activo</span>}
-                      {product.status === 'coming_soon' && <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-400 bg-blue-400/10 px-2 py-1 rounded-full border border-blue-500/20"><Clock className="w-3 h-3"/> Próximamente</span>}
-                      {product.status === 'draft' && <span className="inline-flex items-center gap-1 text-xs font-medium text-zinc-400 bg-zinc-400/10 px-2 py-1 rounded-full"><AlertCircle className="w-3 h-3"/> Borrador</span>}
-                      {product.status === 'archived' && <span className="inline-flex items-center gap-1 text-xs font-medium text-red-400 bg-red-400/10 px-2 py-1 rounded-full"><AlertCircle className="w-3 h-3"/> Archivado</span>}
+                      {product.status === 'active' && <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full"><CheckCircle2 className="w-3 h-3" /> Activo</span>}
+                      {product.status === 'coming_soon' && <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-400 bg-blue-400/10 px-2 py-1 rounded-full border border-blue-500/20"><Clock className="w-3 h-3" /> Próximamente</span>}
+                      {product.status === 'draft' && <span className="inline-flex items-center gap-1 text-xs font-medium text-zinc-400 bg-zinc-400/10 px-2 py-1 rounded-full"><AlertCircle className="w-3 h-3" /> Borrador</span>}
+                      {product.status === 'archived' && <span className="inline-flex items-center gap-1 text-xs font-medium text-red-400 bg-red-400/10 px-2 py-1 rounded-full"><AlertCircle className="w-3 h-3" /> Archivado</span>}
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1">

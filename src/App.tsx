@@ -16,7 +16,7 @@ import { useThemeStore, updateDocumentTheme } from './lib/useThemeStore';
 
 // Admin Pages
 import Dashboard from './pages/admin/Dashboard';
-import Inventory from './pages/admin/InventoryV2';
+import Inventory from './pages/admin/Inventory';
 import Orders from './pages/admin/Orders';
 import POS from './pages/admin/POS';
 import UsersEngine from './pages/admin/UsersEngine';

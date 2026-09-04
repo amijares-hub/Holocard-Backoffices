@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 import { 
   Users, Crosshair, Search, ShieldAlert, Zap, Gift, Activity, 
-  X, Shield, Star, Terminal, Database, RefreshCw, User, Hexagon,
-  Package, History, Mail, ShoppingBag, CheckCircle2, UserCheck
+  X, Shield, Terminal, Database, RefreshCw, Hexagon,
+  History, Mail, ShoppingBag, CheckCircle2, UserCheck, Plus, Trash2, Edit3, Loader2
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -39,13 +39,40 @@ interface ActivityLog {
   type: 'level_up' | 'capture' | 'purchase' | 'system';
 }
 
+interface ProductItem {
+  id: string;
+  name: string;
+  base_price: number;
+  base_stock: number;
+}
+
+interface OrderItem {
+  id?: string;
+  product_id: string;
+  quantity: number;
+  price_at_purchase: number;
+  products?: { name: string };
+}
+
+interface Order {
+  id: string;
+  user_id: string;
+  customer_email: string;
+  customer_phone: string;
+  total_amount: number;
+  status: string;
+  shipping_address: any;
+  created_at: string;
+  order_items?: OrderItem[];
+}
+
 export default function UsersEngine() {
   const [users, setUsers] = useState<UserProfileWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [filteredUsers, setFilteredUsers] = useState<UserProfileWithStats[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserProfileWithStats | null>(null);
-  const [selectedUserVault, setSelectedUserVault] = useState<any[]>([]);
-  const [vaultLoading, setVaultLoading] = useState(false);
+  const [, setSelectedUserVault] = useState<any[]>([]);
+  const [, setVaultLoading] = useState(false);
   const [liveLogs, setLiveLogs] = useState<ActivityLog[]>([]);
   
   // Filtros
@@ -59,7 +86,6 @@ export default function UsersEngine() {
   const [editRole, setEditRole] = useState<'admin' | 'client'>('client');
   const [editPokeballs, setEditPokeballs] = useState(0);
   const [editShadowNotes, setEditShadowNotes] = useState('');
-  const [isConfirmingEdit, setIsConfirmingEdit] = useState(false);
 
   // Consola / Pestañas de detalle
   const [activeConsoleTab, setActiveConsoleTab] = useState<'mainframe' | 'identity' | 'transactions'>('mainframe');
@@ -68,39 +94,51 @@ export default function UsersEngine() {
   const [editCity, setEditCity] = useState('');
   const [editZip, setEditZip] = useState('');
   const [editCountry, setEditCountry] = useState('');
-  const [userOrders, setUserOrders] = useState<any[]>([]);
+  const [userOrders, setUserOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+
+  // Gestión Real de Pedidos
+  const [availableProducts, setAvailableProducts] = useState<ProductItem[]>([]);
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [orderForm, setOrderForm] = useState({
+    status: 'paid',
+    phone: '',
+    address: 'Calle Monte Las Mercedes, 127',
+    city: 'San Cristóbal de La Laguna',
+    postalCode: '38293',
+    items: [] as { product_id: string; quantity: number; price: number }[]
+  });
 
   // Regalos / Airdrop
   const [isConfirmingGift, setIsConfirmingGift] = useState(false);
-  const [giftTier, setGiftTier] = useState('All');
+  const [giftTier] = useState('All');
   const [giftResourceType, setGiftResourceType] = useState<'exp' | 'pokeballs' | 'bp' | 'sku'>('pokeballs');
   const [giftAmount, setGiftAmount] = useState(10);
-  const [giftMinLevel, setGiftMinLevel] = useState(0);
-  const [giftMaxLevel, setGiftMaxLevel] = useState(100);
-  const [giftMinLTV, setGiftMinLTV] = useState(0);
-  const [giftInactivity, setGiftInactivity] = useState(0);
-  const [giftMessage, setGiftMessage] = useState('');
+  const [giftMinLevel] = useState(0);
+  const [giftMaxLevel] = useState(100);
+  const [giftMinLTV] = useState(0);
+  const [giftInactivity] = useState(0);
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployProgress, setDeployProgress] = useState(0);
 
   useEffect(() => {
     fetchUsers();
     fetchRealLogs();
+    fetchProducts();
   }, []);
 
   useEffect(() => {
     applyFilters();
   }, [users, filterType, searchQuery]);
 
-  // Carga de usuarios reales desde Supabase
   const fetchUsers = async () => {
     setLoading(true);
     
     try {
       let profiles: any[] = [];
       
-      // Consultar tabla de perfiles de la base de datos
       const { data: pData, error: pError } = await supabase.from('profiles').select('*');
       if (!pError && pData) {
         profiles = pData;
@@ -109,7 +147,6 @@ export default function UsersEngine() {
         if (fallbackProfiles) profiles = fallbackProfiles;
       }
 
-      // Consultar la tabla de pedidos para LTV y recuento de compras
       const { data: orders } = await supabase.from('orders').select('user_id, total_amount, status');
       const userOrderStats = new Map<string, { count: number; spent: number }>();
 
@@ -122,7 +159,6 @@ export default function UsersEngine() {
         });
       });
 
-      // Mapeo con los datos reales
       const mappedUsers: UserProfileWithStats[] = profiles.map(p => {
         const stats = userOrderStats.get(p.id) || { count: 0, spent: 0 };
         const computedSpent = (p.total_spent && Number(p.total_spent) > 0) ? Number(p.total_spent) : stats.spent;
@@ -173,12 +209,27 @@ export default function UsersEngine() {
     }
   };
 
-  // Carga de logs reales basados en actividad de pedidos y registros reales
+  const fetchProducts = async () => {
+    try {
+      if (!supabase) return;
+      const { data } = await supabase.from('products').select('id, name, base_price, base_stock');
+      setAvailableProducts(
+        (data || []).map(p => ({
+          id: p.id,
+          name: p.name,
+          base_price: Number(p.base_price || 0),
+          base_stock: Number(p.base_stock || 0)
+        }))
+      );
+    } catch (err) {
+      console.error('Error cargando productos:', err);
+    }
+  };
+
   const fetchRealLogs = async () => {
     try {
       const logsList: ActivityLog[] = [];
 
-      // Obtener últimos pedidos
       const { data: recentOrders } = await supabase
         .from('orders')
         .select('id, total_amount, created_at, user_id')
@@ -194,7 +245,6 @@ export default function UsersEngine() {
         });
       });
 
-      // Obtener últimos registros de usuarios
       const { data: recentUsers } = await supabase
         .from('profiles')
         .select('id, email, full_name, created_at')
@@ -210,7 +260,6 @@ export default function UsersEngine() {
         });
       });
 
-      // Ordenar por fecha descendente
       logsList.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
       if (logsList.length === 0) {
@@ -320,16 +369,21 @@ export default function UsersEngine() {
 
   const fetchUserOrders = async (userId: string) => {
     setOrdersLoading(true);
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    
-    if (!error && data) {
-      setUserOrders(data);
+    try {
+      if (!supabase) return;
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*, order_items(*, products(name))')
+        .or(`user_id.eq.${userId},customer_email.eq.${selectedUser?.email || ''}`)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setUserOrders(data || []);
+    } catch (err) {
+      console.error('Error cargando pedidos del usuario:', err);
+    } finally {
+      setOrdersLoading(false);
     }
-    setOrdersLoading(false);
   };
 
   const openGodConsole = (user: UserProfileWithStats) => {
@@ -382,9 +436,146 @@ export default function UsersEngine() {
       ...payload
     } : u));
     
-    setIsConfirmingEdit(false);
     setSelectedUser(null);
     fetchRealLogs();
+  };
+
+  // MANEJADORES DE PEDIDOS REALES (CRUD)
+  const handleOpenCreateOrder = () => {
+    setEditingOrder(null);
+    setOrderForm({
+      status: 'paid',
+      phone: selectedUser?.phone || '',
+      address: selectedUser?.address_street || 'Calle Monte Las Mercedes, 127',
+      city: selectedUser?.address_city || 'San Cristóbal de La Laguna',
+      postalCode: selectedUser?.address_zip || '38293',
+      items: availableProducts.length > 0 ? [{ product_id: availableProducts[0].id, quantity: 1, price: availableProducts[0].base_price }] : []
+    });
+    setIsOrderModalOpen(true);
+  };
+
+  const handleOpenEditOrder = (order: Order) => {
+    setEditingOrder(order);
+    setOrderForm({
+      status: order.status || 'paid',
+      phone: order.customer_phone || selectedUser?.phone || '',
+      address: order.shipping_address?.address || selectedUser?.address_street || 'Calle Monte Las Mercedes, 127',
+      city: order.shipping_address?.city || selectedUser?.address_city || 'San Cristóbal de La Laguna',
+      postalCode: order.shipping_address?.postalCode || selectedUser?.address_zip || '38293',
+      items: (order.order_items || []).map(i => ({
+        product_id: i.product_id,
+        quantity: i.quantity,
+        price: Number(i.price_at_purchase) || 0
+      }))
+    });
+    setIsOrderModalOpen(true);
+  };
+
+  const handleAddItemToOrder = () => {
+    if (availableProducts.length === 0) return;
+    setOrderForm(prev => ({
+      ...prev,
+      items: [...prev.items, { product_id: availableProducts[0].id, quantity: 1, price: availableProducts[0].base_price }]
+    }));
+  };
+
+  const handleRemoveItemFromOrder = (index: number) => {
+    setOrderForm(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleSaveOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser || !supabase) return;
+    setSavingOrder(true);
+
+    try {
+      const calculatedTotal = orderForm.items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
+      const orderPayload = {
+        user_id: selectedUser.id.includes('@') ? null : selectedUser.id,
+        customer_email: selectedUser.email,
+        customer_phone: orderForm.phone,
+        status: orderForm.status,
+        total_amount: calculatedTotal,
+        shipping_address: {
+          address: orderForm.address,
+          city: orderForm.city,
+          postalCode: orderForm.postalCode
+        }
+      };
+
+      let orderId = editingOrder?.id;
+
+      if (editingOrder) {
+        const { error: updateErr } = await supabase
+          .from('orders')
+          .update(orderPayload)
+          .eq('id', editingOrder.id);
+
+        if (updateErr) throw updateErr;
+
+        await supabase.from('order_items').delete().eq('order_id', editingOrder.id);
+      } else {
+        const { data: newOrder, error: insertErr } = await supabase
+          .from('orders')
+          .insert([orderPayload])
+          .select()
+          .single();
+
+        if (insertErr) throw insertErr;
+        orderId = newOrder.id;
+      }
+
+      if (orderId && orderForm.items.length > 0) {
+        const itemsPayload = orderForm.items.map(i => ({
+          order_id: orderId,
+          product_id: i.product_id,
+          quantity: i.quantity,
+          price_at_purchase: i.price
+        }));
+
+        const { error: itemsErr } = await supabase.from('order_items').insert(itemsPayload);
+        if (itemsErr) throw itemsErr;
+
+        for (const item of orderForm.items) {
+          const prod = availableProducts.find(p => p.id === item.product_id);
+          if (prod) {
+            const newStock = Math.max(0, prod.base_stock - item.quantity);
+            await supabase.from('products').update({ base_stock: newStock }).eq('id', item.product_id);
+          }
+        }
+      }
+
+      setIsOrderModalOpen(false);
+      fetchUserOrders(selectedUser.id);
+      fetchUsers();
+      fetchRealLogs();
+    } catch (err: any) {
+      console.error('Error guardando pedido:', err);
+      alert(err.message || 'Error al guardar el pedido');
+    } finally {
+      setSavingOrder(false);
+    }
+  };
+
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!confirm('¿Seguro que deseas eliminar este pedido del historial? Esta acción actualizará los registros permanentemente.')) return;
+    try {
+      if (!supabase) return;
+      const { error } = await supabase.from('orders').delete().eq('id', orderId);
+      if (error) throw error;
+
+      if (selectedUser) {
+        fetchUserOrders(selectedUser.id);
+        fetchUsers();
+        fetchRealLogs();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error al eliminar el pedido.');
+    }
   };
 
   const calculateAirdropImpact = () => {
@@ -986,35 +1177,74 @@ export default function UsersEngine() {
                   </div>
                 )}
 
+                {/* PESTAÑA HISTORIAL Y CREACIÓN/EDICIÓN DE PEDIDOS REALES */}
                 {activeConsoleTab === 'transactions' && (
                   <div className="space-y-4">
-                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-800 pb-2">
-                      Historial de Pedidos
-                    </h3>
+                    <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                        Historial de Pedidos
+                      </h3>
+                      <button
+                        onClick={handleOpenCreateOrder}
+                        className="bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-black uppercase px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all active:scale-95 shadow-lg shadow-amber-500/10"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Crear Pedido Real
+                      </button>
+                    </div>
 
                     {ordersLoading ? (
                       <p className="text-center py-8 text-xs text-zinc-500 font-bold uppercase tracking-wider">Cargando pedidos...</p>
                     ) : userOrders.length > 0 ? (
-                      <div className="space-y-2.5">
+                      <div className="space-y-3">
                         {userOrders.map((order) => (
-                          <div key={order.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between">
-                            <div>
-                              <p className="text-xs font-bold text-zinc-100">
-                                Pedido #{order.id.substring(0, 8)}
-                              </p>
-                              <p className="text-[10px] text-zinc-400 font-mono">
-                                {new Date(order.created_at).toLocaleDateString()}
-                              </p>
+                          <div key={order.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3 shadow-md">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="text-[10px] font-mono text-zinc-400 block">ID: {order.id.slice(0, 8)}</span>
+                                <span className="text-xs font-black text-zinc-100 uppercase">{new Date(order.created_at).toLocaleDateString()}</span>
+                              </div>
+                              <span className="text-sm font-black text-amber-400">€{Number(order.total_amount || 0).toFixed(2)}</span>
                             </div>
-                            <div className="text-right">
-                              <p className="text-xs font-black text-amber-400">{Number(order.total_amount).toFixed(2)}€</p>
-                              <span className="text-[9px] font-bold uppercase text-zinc-400">{order.status || 'Completado'}</span>
+
+                            <div className="space-y-1 border-t border-b border-zinc-800 py-2">
+                              {(order.order_items || []).map((item, idx) => (
+                                <div key={idx} className="flex justify-between text-[11px] text-zinc-300">
+                                  <span>{item.quantity}x {item.products?.name || 'Producto TCG'}</span>
+                                  <span className="font-mono">€{(Number(item.price_at_purchase) * item.quantity).toFixed(2)}</span>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="flex justify-between items-center pt-1">
+                              <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full text-[9px] font-black uppercase">
+                                {order.status || 'Completado'}
+                              </span>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleOpenEditOrder(order)}
+                                  className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+                                  title="Editar pedido"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteOrder(order.id)}
+                                  className="p-1.5 text-zinc-400 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors"
+                                  title="Eliminar pedido"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-center py-8 text-xs text-zinc-500 font-bold uppercase tracking-wider">Sin compras registradas</p>
+                      <div className="py-12 text-center border border-dashed border-zinc-800 rounded-2xl">
+                        <ShoppingBag className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                        <p className="text-xs text-zinc-500 font-bold uppercase">Sin compras registradas</p>
+                      </div>
                     )}
                   </div>
                 )}
@@ -1035,6 +1265,136 @@ export default function UsersEngine() {
           </>
         )}
       </AnimatePresence>
+
+      {/* MODAL CREAR / EDITAR PEDIDO REAL */}
+      {isOrderModalOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#12141c] border border-zinc-800 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar text-zinc-200">
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
+              <h3 className="text-sm font-black text-zinc-100 uppercase italic">
+                {editingOrder ? 'Editar Pedido Real' : 'Crear Pedido Real en Supabase'}
+              </h3>
+              <button onClick={() => setIsOrderModalOpen(false)} className="text-zinc-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveOrder} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-zinc-400 font-bold uppercase block mb-1">Estado</label>
+                  <select
+                    value={orderForm.status}
+                    onChange={(e) => setOrderForm({ ...orderForm, status: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-zinc-100 outline-none font-bold"
+                  >
+                    <option value="paid">Pagado (Paid)</option>
+                    <option value="pending">Pendiente (Pending)</option>
+                    <option value="shipped">Enviado (Shipped)</option>
+                    <option value="cancelled">Cancelado (Cancelled)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-zinc-400 font-bold uppercase block mb-1">Teléfono</label>
+                  <input
+                    type="text"
+                    value={orderForm.phone}
+                    onChange={(e) => setOrderForm({ ...orderForm, phone: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-zinc-100 outline-none font-medium"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-zinc-400 font-bold uppercase block mb-1">Dirección de Envío</label>
+                <input
+                  type="text"
+                  value={orderForm.address}
+                  onChange={(e) => setOrderForm({ ...orderForm, address: e.target.value })}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-zinc-100 outline-none font-medium"
+                />
+              </div>
+
+              <div className="space-y-2 border-t border-zinc-800 pt-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-amber-400 font-black uppercase text-[11px]">Productos del Pedido</span>
+                  <button
+                    type="button"
+                    onClick={handleAddItemToOrder}
+                    className="text-amber-400 font-bold text-[10px] uppercase hover:underline"
+                  >
+                    + Añadir Producto
+                  </button>
+                </div>
+
+                {orderForm.items.map((item, index) => (
+                  <div key={index} className="flex gap-2 items-center bg-zinc-900 p-2 rounded-xl border border-zinc-800">
+                    <select
+                      value={item.product_id}
+                      onChange={(e) => {
+                        const selectedProd = availableProducts.find(p => p.id === e.target.value);
+                        const updated = [...orderForm.items];
+                        updated[index].product_id = e.target.value;
+                        if (selectedProd) updated[index].price = selectedProd.base_price;
+                        setOrderForm({ ...orderForm, items: updated });
+                      }}
+                      className="flex-1 bg-transparent text-zinc-100 text-[11px] outline-none font-medium"
+                    >
+                      {availableProducts.map(p => (
+                        <option key={p.id} value={p.id} className="bg-[#12141c] text-zinc-100">{p.name} (€{p.base_price.toFixed(2)})</option>
+                      ))}
+                    </select>
+
+                    <input
+                      type="number"
+                      min="1"
+                      value={item.quantity}
+                      onChange={(e) => {
+                        const updated = [...orderForm.items];
+                        updated[index].quantity = parseInt(e.target.value) || 1;
+                        setOrderForm({ ...orderForm, items: updated });
+                      }}
+                      className="w-12 bg-zinc-800 text-center text-zinc-100 p-1 rounded-lg font-bold border border-zinc-700 outline-none"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveItemFromOrder(index)}
+                      className="text-zinc-500 hover:text-red-400 p-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-3 border-t border-zinc-800 flex justify-between items-center">
+                <span className="text-zinc-400 font-bold uppercase">Total Calculado:</span>
+                <span className="text-lg font-black text-amber-400">
+                  €{orderForm.items.reduce((acc, i) => acc + (i.price * i.quantity), 0).toFixed(2)}
+                </span>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsOrderModalOpen(false)}
+                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-2.5 rounded-xl uppercase transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingOrder}
+                  className="flex-1 bg-amber-500 hover:bg-amber-400 text-black font-black py-2.5 rounded-xl uppercase flex items-center justify-center gap-2 transition-all active:scale-95"
+                >
+                  {savingOrder ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Procesar Pedido'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {

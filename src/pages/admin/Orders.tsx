@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, 
   Filter, 
@@ -17,7 +17,8 @@ import {
   Loader2,
   Printer,
   Trash2,
-  QrCode
+  QrCode,
+  Plus
 } from 'lucide-react';
 import CorreosLabelModal from '../../components/admin/CorreosLabelModal';
 import { supabase } from '../../lib/supabase';
@@ -47,6 +48,13 @@ interface Order {
   order_items?: OrderItem[];
 }
 
+interface ProductItem {
+  id: string;
+  name: string;
+  base_price: number;
+  base_stock: number;
+}
+
 const statusConfig = {
   pending: { label: 'Pendiente', color: 'text-yellow-500', bg: 'bg-yellow-500/10', icon: Clock },
   paid: { label: 'Pagado', color: 'text-blue-500', bg: 'bg-blue-500/10', icon: CreditCard },
@@ -67,6 +75,20 @@ export default function Orders() {
   const [correosOrder, setCorreosOrder] = useState<Order | null>(null);
   const [isCorreosModalOpen, setIsCorreosModalOpen] = useState(false);
 
+  // Crear Pedido
+  const [availableProducts, setAvailableProducts] = useState<ProductItem[]>([]);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [savingNewOrder, setSavingNewOrder] = useState(false);
+  const [newOrderForm, setNewOrderForm] = useState({
+    email: '',
+    phone: '',
+    status: 'paid' as 'pending' | 'paid' | 'shipped' | 'cancelled',
+    address: 'Calle Monte Las Mercedes, 127',
+    city: 'San Cristóbal de La Laguna',
+    postalCode: '38293',
+    items: [] as { product_id: string; quantity: number; price: number }[]
+  });
+
   // Stats
   const [stats, setStats] = useState({
     totalSales: 0,
@@ -76,7 +98,27 @@ export default function Orders() {
 
   useEffect(() => {
     fetchOrders();
+    fetchProducts();
   }, []);
+
+  const fetchProducts = async () => {
+    try {
+      if (!supabase) return;
+      const { data } = await supabase.from('products').select('id, name, base_price, base_stock');
+      if (data) {
+        setAvailableProducts(
+          data.map(p => ({
+            id: p.id,
+            name: p.name,
+            base_price: Number(p.base_price || 0),
+            base_stock: Number(p.base_stock || 0)
+          }))
+        );
+      }
+    } catch (err) {
+      console.error('Error cargando productos:', err);
+    }
+  };
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -104,7 +146,10 @@ export default function Orders() {
 
         const itemsByOrder = itemsData?.reduce((acc: any, item: any) => {
           if (!acc[item.order_id]) acc[item.order_id] = [];
-          acc[item.order_id].push(item);
+          acc[item.order_id].push({
+            ...item,
+            price_at_time_of_purchase: Number(item.price_at_time_of_purchase || item.price_at_purchase || 0)
+          });
           return acc;
         }, {}) || {};
 
@@ -155,6 +200,107 @@ export default function Orders() {
     setIsUpdating(false);
   };
 
+  // MANEJO DE CREACIÓN DE PEDIDO
+  const handleOpenCreateModal = () => {
+    setNewOrderForm({
+      email: '',
+      phone: '',
+      status: 'paid',
+      address: 'Calle Monte Las Mercedes, 127',
+      city: 'San Cristóbal de La Laguna',
+      postalCode: '38293',
+      items: availableProducts.length > 0 ? [{ product_id: availableProducts[0].id, quantity: 1, price: availableProducts[0].base_price }] : []
+    });
+    setIsCreateModalOpen(true);
+  };
+
+  const handleAddItemToNewOrder = () => {
+    if (availableProducts.length === 0) return;
+    setNewOrderForm(prev => ({
+      ...prev,
+      items: [...prev.items, { product_id: availableProducts[0].id, quantity: 1, price: availableProducts[0].base_price }]
+    }));
+  };
+
+  const handleRemoveItemFromNewOrder = (index: number) => {
+    setNewOrderForm(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleCreateOrderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newOrderForm.email.trim()) {
+      alert('Por favor introduce el email del cliente.');
+      return;
+    }
+    if (newOrderForm.items.length === 0) {
+      alert('Añade al menos un producto al pedido.');
+      return;
+    }
+
+    setSavingNewOrder(true);
+
+    try {
+      const calculatedTotal = newOrderForm.items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
+      let userId = null;
+      const { data: prof } = await supabase.from('profiles').select('id').eq('email', newOrderForm.email.trim()).maybeSingle();
+      if (prof?.id) userId = prof.id;
+
+      const orderPayload = {
+        user_id: userId,
+        customer_email: newOrderForm.email.trim(),
+        customer_phone: newOrderForm.phone,
+        status: newOrderForm.status,
+        total_amount: calculatedTotal,
+        shipping_address: {
+          address: newOrderForm.address,
+          city: newOrderForm.city,
+          postalCode: newOrderForm.postalCode
+        }
+      };
+
+      const { data: newOrder, error: insertErr } = await supabase
+        .from('orders')
+        .insert([orderPayload])
+        .select()
+        .single();
+
+      if (insertErr) throw insertErr;
+
+      if (newOrder?.id && newOrderForm.items.length > 0) {
+        const itemsPayload = newOrderForm.items.map(i => ({
+          order_id: newOrder.id,
+          product_id: i.product_id,
+          quantity: i.quantity,
+          price_at_time_of_purchase: i.price,
+          price_at_purchase: i.price
+        }));
+
+        const { error: itemsErr } = await supabase.from('order_items').insert(itemsPayload);
+        if (itemsErr) throw itemsErr;
+
+        for (const item of newOrderForm.items) {
+          const prod = availableProducts.find(p => p.id === item.product_id);
+          if (prod) {
+            const newStock = Math.max(0, prod.base_stock - item.quantity);
+            await supabase.from('products').update({ base_stock: newStock }).eq('id', item.product_id);
+          }
+        }
+      }
+
+      setIsCreateModalOpen(false);
+      fetchOrders();
+    } catch (err: any) {
+      console.error('Error creando pedido:', err);
+      alert(err.message || 'Error al crear el pedido');
+    } finally {
+      setSavingNewOrder(false);
+    }
+  };
+
   const generateShippingLabel = async (order: Order) => {
     setIsUpdating(true);
     
@@ -177,7 +323,6 @@ export default function Orders() {
       let pdfBase64: string | null = null;
       let isRealShipment = false;
 
-      // 1. Intentar llamar a la Edge Function
       try {
         const { data, error } = await supabase.functions.invoke('create-correos-shipment', {
           body: payload
@@ -192,7 +337,6 @@ export default function Orders() {
         console.warn('Edge Function no disponible, aplicando modo simulación local:', fnErr);
       }
 
-      // 2. Actualizar la orden en la base de datos
       const { error: updateError } = await supabase
         .from('orders')
         .update({
@@ -204,7 +348,6 @@ export default function Orders() {
 
       if (updateError) throw updateError;
 
-      // 3. Registrar evento de seguimiento con formato limpio
       await supabase
         .from('order_tracking_events')
         .insert({
@@ -217,7 +360,6 @@ export default function Orders() {
           location: 'Centro Logístico Principal'
         });
 
-      // 4. Abrir PDF oficial en caso de existir en la respuesta
       if (pdfBase64) {
         const blob = new Blob([Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' });
         const pdfUrl = URL.createObjectURL(blob);
@@ -237,7 +379,6 @@ export default function Orders() {
   const confirmDelete = async () => {
     setIsDeleting(true);
     
-    // Paso A: Restaurar Stock
     const { data: items } = await supabase
       .from('order_items')
       .select('product_id, quantity')
@@ -265,7 +406,6 @@ export default function Orders() {
       }
     }
 
-    // Paso B: Borrado en Cascada
     await supabase.from('orders').delete().in('id', ordersToDelete);
     
     setOrdersToDelete([]);
@@ -305,12 +445,10 @@ export default function Orders() {
     const shortId = selectedOrder.id.slice(0, 8).toUpperCase();
     const originalTitle = document.title;
     
-    // Asignar nombre dinámico basado en el número de pedido
     document.title = `Albaran_${shortId}`;
     
     window.print();
 
-    // Restaurar el título original
     setTimeout(() => {
       document.title = originalTitle;
     }, 1000);
@@ -368,11 +506,21 @@ export default function Orders() {
           }
         }
       `}</style>
+      
+      {/* HEADER CON BOTÓN + CREAR PEDIDO */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tight uppercase italic text-foreground">Gestión de Pedidos</h1>
           <p className="text-muted-foreground mt-1 uppercase text-[10px] font-bold tracking-widest">Control centralizado de transacciones y logística.</p>
         </div>
+
+        <button
+          onClick={handleOpenCreateModal}
+          className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg shadow-red-600/20 active:scale-95"
+        >
+          <Plus className="w-4 h-4" />
+          Crear Pedido
+        </button>
       </div>
 
       {/* Stats Quick View */}
@@ -486,7 +634,7 @@ export default function Orders() {
                   <td colSpan={6} className="p-20 text-center text-zinc-500 uppercase text-xs font-black tracking-widest">No se encontraron pedidos</td>
                 </tr>
               ) : filteredOrders.map((order, i) => {
-                const status = statusConfig[order.status];
+                const status = statusConfig[order.status] || statusConfig.paid;
                 return (
                   <motion.tr 
                     initial={{ opacity: 0, y: 10 }}
@@ -602,11 +750,10 @@ export default function Orders() {
                   </button>
                 </div>
               </div>
-              {/* Printable Header (Only visible on print) */}
+
+              {/* Printable Header */}
               <div className="hidden print:block printable-area print-container">
-                {/* ── Official Header ─────────────────────────────────────── */}
                 <div className="flex justify-between items-start mb-10 border-b-2 border-black pb-8">
-                  {/* Sender: Logo + Fiscal Data */}
                   <div className="flex items-start gap-4">
                     <img
                       src="/Imagenes/Logo%20de%20la%20empresa/logo%20Holocard.jpg"
@@ -628,7 +775,6 @@ export default function Orders() {
                       </p>
                     </div>
                   </div>
-                  {/* Document Title + Order Reference */}
                   <div className="text-right">
                     <h2 className="text-xl font-black uppercase mb-1">ALBARÁN DE ENTREGA</h2>
                     <p className="text-sm font-mono font-bold">ORDEN: #{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
@@ -638,7 +784,6 @@ export default function Orders() {
                   </div>
                 </div>
 
-                {/* ── Customer & Shipping ──────────────────────────────────── */}
                 <div className="grid grid-cols-2 gap-10 mb-10">
                   <div>
                     <h3 className="text-[10px] font-black uppercase tracking-widest mb-4 border-b border-black pb-1">DATOS DEL CLIENTE</h3>
@@ -662,7 +807,6 @@ export default function Orders() {
                   </div>
                 </div>
 
-                {/* ── Line Items Table ─────────────────────────────────────── */}
                 <table className="w-full text-left mb-10">
                   <thead>
                     <tr className="border-b-2 border-black">
@@ -679,13 +823,12 @@ export default function Orders() {
                           <p className="text-sm font-bold uppercase">{item.products?.name}</p>
                         </td>
                         <td className="py-4 text-center font-bold">{item.quantity}</td>
-                        <td className="py-4 text-right">€{item.price_at_time_of_purchase.toFixed(2)}</td>
-                        <td className="py-4 text-right font-black">€{(item.price_at_time_of_purchase * item.quantity).toFixed(2)}</td>
+                        <td className="py-4 text-right">€{(item.price_at_time_of_purchase || 0).toFixed(2)}</td>
+                        <td className="py-4 text-right font-black">€{((item.price_at_time_of_purchase || 0) * item.quantity).toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
-                    {/* Canary Islands Tax Exemption Row */}
                     <tr className="border-t border-zinc-300">
                       <td colSpan={3} className="py-2 text-right text-[10px] font-black uppercase tracking-widest text-zinc-500">
                         IVA / IGIC
@@ -705,7 +848,6 @@ export default function Orders() {
                   </tfoot>
                 </table>
 
-                {/* ── Legal Footer ─────────────────────────────────────────── */}
                 <div className="mt-16 pt-8 border-t border-zinc-300">
                   <p className="text-[9px] font-bold text-zinc-500 italic text-center leading-relaxed">
                     Exención Franquicia Fiscal, Ley 7/2017, de 27 de diciembre, de Presupuestos Generales de la Comunidad Autónoma de Canarias.
@@ -717,7 +859,6 @@ export default function Orders() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-8 space-y-12 scrollbar-hide no-print">
-                {/* Customer & Shipping Grid */}
                 <div className="grid md:grid-cols-2 gap-8">
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-red-500">
@@ -748,7 +889,6 @@ export default function Orders() {
                   </div>
                 </div>
 
-                {/* Items List */}
                 <div className="space-y-6">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-red-500">
                     <ShoppingBag className="w-4 h-4" /> Productos en el Pedido
@@ -764,15 +904,14 @@ export default function Orders() {
                           <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Cantidad: {item.quantity}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-lg font-black italic">{formatCurrency(item.price_at_time_of_purchase * item.quantity)}</p>
-                          <p className="text-[10px] text-zinc-500 font-bold">€{item.price_at_time_of_purchase} / unidad</p>
+                          <p className="text-lg font-black italic">{formatCurrency((item.price_at_time_of_purchase || 0) * item.quantity)}</p>
+                          <p className="text-[10px] text-zinc-500 font-bold">€{(item.price_at_time_of_purchase || 0).toFixed(2)} / unidad</p>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* Management Section */}
                 <div className="space-y-6">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-red-500">
                     <Clock className="w-4 h-4" /> Gestión de Estado
@@ -801,7 +940,6 @@ export default function Orders() {
                       })}
                     </div>
                     
-                    {/* Generar Envío Correos Button */}
                     <div className="pt-4 border-t border-white/5 flex flex-col gap-3">
                       <button 
                         disabled={isUpdating}
@@ -821,7 +959,6 @@ export default function Orders() {
                 </div>
               </div>
 
-              {/* Panel Footer */}
               <div className="p-8 border-t border-border bg-card/80 backdrop-blur-xl transition-colors">
                 <div className="flex justify-between items-center mb-6">
                   <div className="space-y-1">
@@ -839,6 +976,159 @@ export default function Orders() {
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Crear Pedido Nuevo */}
+      <AnimatePresence>
+        {isCreateModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-card border border-border rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar text-foreground"
+            >
+              <div className="flex justify-between items-center border-b border-border pb-4 mb-4">
+                <h3 className="text-xl font-black italic uppercase text-foreground">Crear Pedido Directo</h3>
+                <button onClick={() => setIsCreateModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateOrderSubmit} className="space-y-4 text-xs">
+                <div>
+                  <label className="text-muted-foreground font-bold uppercase block mb-1">Email del Cliente *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="cliente@ejemplo.com"
+                    value={newOrderForm.email}
+                    onChange={(e) => setNewOrderForm({ ...newOrderForm, email: e.target.value })}
+                    className="w-full bg-input border border-border rounded-xl p-3 text-foreground"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-muted-foreground font-bold uppercase block mb-1">Estado</label>
+                    <select
+                      value={newOrderForm.status}
+                      onChange={(e) => setNewOrderForm({ ...newOrderForm, status: e.target.value as any })}
+                      className="w-full bg-input border border-border rounded-xl p-3 text-foreground"
+                    >
+                      <option value="paid">Pagado (Paid)</option>
+                      <option value="pending">Pendiente (Pending)</option>
+                      <option value="shipped">Enviado (Shipped)</option>
+                      <option value="cancelled">Cancelado (Cancelled)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-muted-foreground font-bold uppercase block mb-1">Teléfono</label>
+                    <input
+                      type="text"
+                      placeholder="+34 600 000 000"
+                      value={newOrderForm.phone}
+                      onChange={(e) => setNewOrderForm({ ...newOrderForm, phone: e.target.value })}
+                      className="w-full bg-input border border-border rounded-xl p-3 text-foreground"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-muted-foreground font-bold uppercase block mb-1">Dirección de Envío</label>
+                  <input
+                    type="text"
+                    value={newOrderForm.address}
+                    onChange={(e) => setNewOrderForm({ ...newOrderForm, address: e.target.value })}
+                    className="w-full bg-input border border-border rounded-xl p-3 text-foreground"
+                  />
+                </div>
+
+                <div className="space-y-2 border-t border-border pt-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-yellow-500 font-black uppercase text-xs">Productos del Pedido</span>
+                    <button
+                      type="button"
+                      onClick={handleAddItemToNewOrder}
+                      className="text-red-500 font-bold text-[10px] uppercase hover:underline flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> Añadir Producto
+                    </button>
+                  </div>
+
+                  {newOrderForm.items.map((item, index) => (
+                    <div key={index} className="flex gap-2 items-center bg-muted/40 p-2.5 rounded-xl border border-border">
+                      <select
+                        value={item.product_id}
+                        onChange={(e) => {
+                          const selectedProd = availableProducts.find(p => p.id === e.target.value);
+                          const updated = [...newOrderForm.items];
+                          updated[index].product_id = e.target.value;
+                          if (selectedProd) updated[index].price = selectedProd.base_price;
+                          setNewOrderForm({ ...newOrderForm, items: updated });
+                        }}
+                        className="flex-1 bg-transparent text-foreground text-xs outline-none"
+                      >
+                        {availableProducts.map(p => (
+                          <option key={p.id} value={p.id} className="bg-card text-foreground">{p.name} (€{p.base_price.toFixed(2)})</option>
+                        ))}
+                      </select>
+
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const updated = [...newOrderForm.items];
+                          updated[index].quantity = parseInt(e.target.value) || 1;
+                          setNewOrderForm({ ...newOrderForm, items: updated });
+                        }}
+                        className="w-14 bg-input text-center text-foreground p-1.5 rounded-lg font-bold border border-border"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItemFromNewOrder(index)}
+                        className="text-muted-foreground hover:text-red-500 p-1"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-3 border-t border-border flex justify-between items-center">
+                  <span className="text-muted-foreground font-bold uppercase">Total Calculado:</span>
+                  <span className="text-xl font-black text-yellow-500">
+                    €{newOrderForm.items.reduce((acc, i) => acc + (i.price * i.quantity), 0).toFixed(2)}
+                  </span>
+                </div>
+
+                <div className="flex gap-3 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateModalOpen(false)}
+                    className="flex-1 bg-muted hover:bg-muted/80 text-foreground font-bold py-3 rounded-xl uppercase text-xs transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingNewOrder}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white font-black py-3 rounded-xl uppercase text-xs flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-red-600/20"
+                  >
+                    {savingNewOrder ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Procesar Pedido'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -887,6 +1177,7 @@ export default function Orders() {
           </motion.div>
         )}
       </AnimatePresence>
+
       {/* Correos Label Modal */}
       <CorreosLabelModal
         order={correosOrder}

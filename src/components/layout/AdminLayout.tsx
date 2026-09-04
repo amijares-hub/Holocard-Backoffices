@@ -13,12 +13,10 @@ import {
   Menu,
   X,
   Crosshair,
-  Palette,
   Layers,
   FolderTree,
   Sun,
   Moon,
-  MessageSquare,
   Maximize2,
   Truck,
   Tag
@@ -30,15 +28,13 @@ import { useThemeStore } from '../../lib/useThemeStore';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/admin' },
-  { icon: Palette, label: 'Home Editor', path: '/admin/home' },
+  { icon: Crosshair, label: 'Users Engine', path: '/admin/users' },
   { icon: Package, label: 'Inventory', path: '/admin/inventory' },
   { icon: FolderTree, label: 'Taxonomía', path: '/admin/taxonomy' },
   { icon: Layers, label: 'Collections', path: '/admin/collections' },
   { icon: ShoppingCart, label: 'Orders', path: '/admin/orders' },
   { icon: Truck, label: 'Logística y Tracking', path: '/admin/tracking' },
   { icon: CreditCard, label: 'POS Terminal', path: '/admin/pos' },
-  { icon: Crosshair, label: 'Users Engine', path: '/admin/users' },
-  { icon: MessageSquare, label: 'Chatbot Settings', path: '/admin/chatbot' },
   { icon: Tag, label: 'Promo Codes', path: '/admin/promos' },
   { icon: Settings, label: 'System Settings', path: '/admin/system' },
 ];
@@ -61,9 +57,6 @@ export default function AdminLayout() {
     }
   };
 
-  // ── Fase 25: Abrir en pestaña completa ────────────────────────────────────
-  // Detecta el contexto de extensión y abre el panel en una pestaña nativa.
-  // En desarrollo/Vercel, abre una nueva ventana del navegador.
   const openInFullTab = () => {
     if (typeof chrome !== 'undefined' && chrome.tabs && chrome.runtime) {
       try {
@@ -133,7 +126,6 @@ export default function AdminLayout() {
         {/* Top Header */}
         <header className="sticky top-0 h-16 border-b border-border bg-header backdrop-blur-2xl flex items-center justify-between px-4 sm:px-8 z-50 transition-colors">
           <div className="flex items-center gap-4 sm:gap-6">
-            {/* Mobile Menu Toggle */}
             <button 
               onClick={() => setIsMobileMenuOpen(true)}
               className="p-2 lg:hidden text-muted-foreground hover:text-foreground"
@@ -161,13 +153,11 @@ export default function AdminLayout() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* ── Botón Full Screen (Fase 25) ─────────────────────────────── */}
             <button
               onClick={openInFullTab}
               className="relative p-2 text-muted-foreground hover:text-red-500 hover:bg-red-600/10 rounded-lg transition-all group"
               title="Abrir en pestaña completa"
             >
-              {/* Anillo pulsante — señal visual de poder */}
               <span className="absolute inset-0 rounded-lg ring-1 ring-red-500/0 group-hover:ring-red-500/40 group-hover:animate-pulse transition-all" />
               <Maximize2 className="w-5 h-5 transition-transform group-hover:scale-110" />
             </button>

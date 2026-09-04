@@ -20,7 +20,8 @@ import {
   Moon,
   MessageSquare,
   Maximize2,
-  Truck
+  Truck,
+  Tag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../../lib/supabase';
@@ -38,6 +39,7 @@ const navItems = [
   { icon: CreditCard, label: 'POS Terminal', path: '/admin/pos' },
   { icon: Crosshair, label: 'Users Engine', path: '/admin/users' },
   { icon: MessageSquare, label: 'Chatbot Settings', path: '/admin/chatbot' },
+  { icon: Tag, label: 'Promo Codes', path: '/admin/promos' },
   { icon: Settings, label: 'System Settings', path: '/admin/system' },
 ];
 

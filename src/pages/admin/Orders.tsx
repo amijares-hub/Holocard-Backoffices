@@ -21,6 +21,7 @@ import {
   Plus
 } from 'lucide-react';
 import CorreosLabelModal from '../../components/admin/CorreosLabelModal';
+import { OrderProductsList } from '../../components/OrderProductsList';
 import { supabase } from '../../lib/supabase';
 import { cn, formatCurrency } from '../../lib/utils';
 
@@ -184,23 +185,32 @@ export default function Orders() {
   };
 
   const updateOrderStatus = async (orderId: string, newStatus: Order['status']) => {
-    setIsUpdating(true);
-    const { error } = await supabase
-      .from('orders')
-      .update({ status: newStatus })
-      .eq('id', orderId);
-
-    if (!error) {
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
-      if (selectedOrder?.id === orderId) {
-        setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null);
-      }
-      calculateStats(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    if (selectedOrder?.id === orderId) {
+      setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null);
     }
-    setIsUpdating(false);
+    calculateStats(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+
+    setIsUpdating(true);
+
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: newStatus })
+        .eq('id', orderId);
+
+      if (error) {
+        fetchOrders();
+        alert(`No se pudo actualizar el estado: ${error.message}`);
+      }
+    } catch (err: any) {
+      fetchOrders();
+      console.error('Error en actualización de orden:', err);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
-  // MANEJO DE CREACIÓN DE PEDIDO
   const handleOpenCreateModal = () => {
     setNewOrderForm({
       email: '',
@@ -889,27 +899,9 @@ export default function Orders() {
                   </div>
                 </div>
 
+                {/* COMPONENTE DESACOPLADO DE PRODUCTOS EN EL PEDIDO */}
                 <div className="space-y-6">
-                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-red-500">
-                    <ShoppingBag className="w-4 h-4" /> Productos en el Pedido
-                  </div>
-                  <div className="space-y-3">
-                    {selectedOrder.order_items?.map((item) => (
-                      <div key={item.id} className="bg-white/[0.02] border border-white/5 p-4 rounded-2xl flex items-center gap-4 group">
-                        <div className="w-16 h-20 bg-black rounded-xl overflow-hidden border border-white/5 shrink-0">
-                          <img src={item.products?.image_url} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="text-sm font-black uppercase leading-tight">{item.products?.name}</h4>
-                          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Cantidad: {item.quantity}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-lg font-black italic">{formatCurrency((item.price_at_time_of_purchase || 0) * item.quantity)}</p>
-                          <p className="text-[10px] text-zinc-500 font-bold">€{(item.price_at_time_of_purchase || 0).toFixed(2)} / unidad</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <OrderProductsList order={selectedOrder} />
                 </div>
 
                 <div className="space-y-6">

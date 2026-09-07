@@ -488,7 +488,8 @@ export default function UsersEngine() {
 
   const handleSaveOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUser || !supabase) return;
+    if (!selectedUser || !supabase || savingOrder) return;
+    
     setSavingOrder(true);
 
     try {
@@ -516,7 +517,6 @@ export default function UsersEngine() {
           .eq('id', editingOrder.id);
 
         if (updateErr) throw updateErr;
-
         await supabase.from('order_items').delete().eq('order_id', editingOrder.id);
       } else {
         const { data: newOrder, error: insertErr } = await supabase
@@ -539,24 +539,15 @@ export default function UsersEngine() {
 
         const { error: itemsErr } = await supabase.from('order_items').insert(itemsPayload);
         if (itemsErr) throw itemsErr;
-
-        for (const item of orderForm.items) {
-          const prod = availableProducts.find(p => p.id === item.product_id);
-          if (prod) {
-            const newStock = Math.max(0, prod.base_stock - item.quantity);
-            await supabase.from('products').update({ base_stock: newStock }).eq('id', item.product_id);
-          }
-        }
       }
 
       setIsOrderModalOpen(false);
-      fetchUserOrders(selectedUser.id);
-      fetchUsers();
-      fetchRealLogs();
+      await fetchUserOrders(selectedUser.id);
     } catch (err: any) {
       console.error('Error guardando pedido:', err);
-      alert(err.message || 'Error al guardar el pedido');
+      alert(err.message || 'Error al procesar la transacción');
     } finally {
+      // Previene que el modal o el formulario queden bloqueados en "Guardando..."
       setSavingOrder(false);
     }
   };

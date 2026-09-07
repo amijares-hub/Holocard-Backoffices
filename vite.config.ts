@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
   // chrome-extension:// no admite rutas absolutas.
   const isVercel = !!process.env.VERCEL;
   return {
-    base: isVercel ? '/' : './',
+    base: '/',
     plugins: [
       react(),
       tailwindcss(),
